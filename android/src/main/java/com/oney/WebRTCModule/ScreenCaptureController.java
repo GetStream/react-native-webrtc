@@ -38,17 +38,21 @@ public class ScreenCaptureController extends AbstractVideoCaptureController {
                 DisplayMetrics displayMetrics = DisplayUtils.getDisplayMetrics((Activity) context);
                 final int width = (int)(displayMetrics.widthPixels * resolutionScale);
                 final int height = (int)(displayMetrics.heightPixels * resolutionScale);
+                if (width != ScreenCaptureController.this.targetWidth || height != ScreenCaptureController.this.targetHeight) {
+                    ScreenCaptureController.this.targetWidth = width;
+                    ScreenCaptureController.this.targetHeight = height;
 
-                // Pivot to the executor thread because videoCapturer.changeCaptureFormat runs in the main
-                // thread and may deadlock.
-                ThreadUtils.runOnExecutor(() -> {
-                    try {
-                        videoCapturer.changeCaptureFormat(width, height, DEFAULT_FPS);
-                    } catch (Exception ex) {
-                        // We ignore exceptions here. The video capturer runs on its own
-                        // thread and we cannot synchronize with it.
-                    }
-                });
+                    // Pivot to the executor thread because videoCapturer.changeCaptureFormat runs in the main
+                    // thread and may deadlock.
+                    ThreadUtils.runOnExecutor(() -> {
+                        try {
+                            videoCapturer.changeCaptureFormat(width, height, DEFAULT_FPS);
+                        } catch (Exception ex) {
+                            // We ignore exceptions here. The video capturer runs on its own
+                            // thread and we cannot synchronize with it.
+                        }
+                    });
+                }
             }
         };
 
