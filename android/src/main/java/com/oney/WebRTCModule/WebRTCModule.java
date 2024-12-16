@@ -1654,6 +1654,85 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         });
     }
 
+    // Frame Cryptor methods
+    ////////////////////////////////
+    RTCFrameCryptor frameCryptor = new RTCFrameCryptor(this);
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public String frameCryptorFactoryCreateFrameCryptor(ReadableMap config) {
+        return frameCryptor.frameCryptorFactoryCreateFrameCryptor(config);
+    }
+
+    @ReactMethod
+    public void frameCryptorSetKeyIndex(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorSetKeyIndex(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorGetKeyIndex(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorGetKeyIndex(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorSetEnabled(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorSetEnabled(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorGetEnabled(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorGetEnabled(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorDispose(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorDispose(config, promise);
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public String frameCryptorFactoryCreateKeyProvider(ReadableMap config) {
+        return frameCryptor.frameCryptorFactoryCreateKeyProvider(config);
+    }
+
+    @ReactMethod
+    public void keyProviderSetSharedKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderSetSharedKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderRatchetSharedKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderRatchetSharedKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderExportSharedKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderExportSharedKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderSetKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderSetKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderRatchetKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderRatchetKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderExportKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderExportKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderSetSifTrailer(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderSetSifTrailer(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderDispose(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderDispose(config, promise);
+    }
+
     @ReactMethod
     public void generateCertificate(ReadableMap options, Promise promise) {
         ThreadUtils.runOnExecutor(() -> {
