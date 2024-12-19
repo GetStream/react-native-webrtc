@@ -508,8 +508,10 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionAddTransceiver
             transceiver = [peerConnection addTransceiverOfType:type init:transceiverInit];
         } else if (trackId) {
             RTCMediaStreamTrack *track = self.localTracks[trackId];
+            RCTLogWarn(@"peerConnectionAddTransceiver() track %@, with id %@", track, trackId);
 
             if (!track) {
+                RCTLogWarn(@"peerConnectionAddTransceiver() track not found, looking for a remote track");
                 track = peerConnection.remoteTracks[trackId];
             }
 
@@ -517,6 +519,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionAddTransceiver
             RTCRtpTransceiverInit *transceiverInit = [SerializeUtils parseTransceiverOptions:initOptions];
 
             transceiver = [peerConnection addTransceiverWithTrack:track init:transceiverInit];
+            RCTLogWarn(@"peerConnectionAddTransceiver() transceiver created");
         } else {
             RCTLogWarn(@"peerConnectionAddTransceiver() no type nor trackId provided in options");
             return;
