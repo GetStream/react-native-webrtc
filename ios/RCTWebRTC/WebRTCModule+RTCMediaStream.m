@@ -408,11 +408,13 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(mediaStreamTrackClone : (nonnull NSString
         NSString *trackUUID = [[NSUUID UUID] UUIDString];
         if ([originalTrack.kind isEqualToString:@"audio"]) {
             RTCAudioTrack *audioTrack = [self.peerConnectionFactory audioTrackWithTrackId:trackUUID];
+            [self.localTracks setObject:audioTrack forKey:trackUUID];
             return trackUUID;
         } else {
             RTCVideoTrack *originalVideoTrack = (RTCVideoTrack *)originalTrack;
             RTCVideoSource *videoSource = originalVideoTrack.source;
             RTCVideoTrack *videoTrack = [self.peerConnectionFactory videoTrackWithSource:videoSource trackId:trackUUID];
+            [self.localTracks setObject:videoTrack forKey:trackUUID];
             return trackUUID;
         }
     }
