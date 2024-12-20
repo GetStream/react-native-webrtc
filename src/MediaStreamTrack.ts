@@ -205,8 +205,6 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
 
         const id = WebRTCModule.mediaStreamTrackClone(this.id);
 
-        console.log('mediaStreamTrackClone called');
-
         return new MediaStreamTrack({
             id,
             kind: this.kind,
