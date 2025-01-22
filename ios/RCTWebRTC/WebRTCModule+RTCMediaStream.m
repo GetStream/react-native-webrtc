@@ -4,6 +4,7 @@
 #import <WebRTC/RTCMediaConstraints.h>
 #import <WebRTC/RTCMediaStreamTrack.h>
 #import <WebRTC/RTCVideoTrack.h>
+#import <WebRTC/WebRTC.h>
 
 #import "RTCMediaStreamTrack+React.h"
 #import "WebRTCModuleOptions.h"
@@ -214,6 +215,7 @@ RCT_EXPORT_METHOD(getUserMedia
 
     if (constraints[@"audio"]) {
         audioTrack = [self createAudioTrack:constraints];
+        [self ensureAudioSessionWithRecording];
     }
     if (constraints[@"video"]) {
         videoTrack = [self createVideoTrack:constraints];
@@ -533,6 +535,32 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects:(nonnull NSString *)trackID na
     }
 
     return peerConnection.remoteTracks[trackId];
+}
+
+- (void)ensureAudioSessionWithRecording {
+  RTCAudioSession* session = [RTCAudioSession sharedInstance];
+  // we also need to set default WebRTC audio configuration, since it may be activated after
+  // this method is called
+  RTCAudioSessionConfiguration* config = [RTCAudioSessionConfiguration webRTCConfiguration];
+  // require audio session to be either PlayAndRecord or MultiRoute
+  if (session.category != AVAudioSessionCategoryPlayAndRecord &&
+      session.category != AVAudioSessionCategoryMultiRoute) {
+    config.category = AVAudioSessionCategoryPlayAndRecord;
+    config.categoryOptions =
+        AVAudioSessionCategoryOptionAllowBluetooth |
+        AVAudioSessionCategoryOptionAllowBluetoothA2DP |
+        AVAudioSessionCategoryOptionAllowAirPlay;
+
+    [session lockForConfiguration];
+    NSError* error = nil;
+    bool success = [session setCategory:config.category withOptions:config.categoryOptions error:&error];
+    if (!success)
+      NSLog(@"ensureAudioSessionWithRecording[true]: setCategory failed due to: %@", error);
+    success = [session setMode:config.mode error:&error];
+    if (!success)
+      NSLog(@"ensureAudioSessionWithRecording[true]: setMode failed due to: %@", error);
+    [session unlockForConfiguration];
+  }
 }
 
 @end
