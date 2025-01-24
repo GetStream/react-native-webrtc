@@ -539,26 +539,29 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects:(nonnull NSString *)trackID na
 
 - (void)ensureAudioSessionWithRecording {
   RTCAudioSession* session = [RTCAudioSession sharedInstance];
+
   // we also need to set default WebRTC audio configuration, since it may be activated after
   // this method is called
   RTCAudioSessionConfiguration* config = [RTCAudioSessionConfiguration webRTCConfiguration];
   // require audio session to be either PlayAndRecord or MultiRoute
-  if (session.category != AVAudioSessionCategoryPlayAndRecord &&
-      session.category != AVAudioSessionCategoryMultiRoute) {
+  if (session.category != AVAudioSessionCategoryPlayAndRecord) {
+    [session lockForConfiguration];
     config.category = AVAudioSessionCategoryPlayAndRecord;
     config.categoryOptions =
-        AVAudioSessionCategoryOptionAllowBluetooth |
-        AVAudioSessionCategoryOptionAllowBluetoothA2DP |
-        AVAudioSessionCategoryOptionAllowAirPlay;
-
-    [session lockForConfiguration];
+             AVAudioSessionCategoryOptionAllowAirPlay|
+             AVAudioSessionCategoryOptionAllowBluetooth|
+             AVAudioSessionCategoryOptionAllowBluetoothA2DP|
+             AVAudioSessionCategoryOptionDefaultToSpeaker;
+    config.mode = AVAudioSessionModeVideoChat;
     NSError* error = nil;
     bool success = [session setCategory:config.category withOptions:config.categoryOptions error:&error];
-    if (!success)
-      NSLog(@"ensureAudioSessionWithRecording[true]: setCategory failed due to: %@", error);
+    if (!success) {
+      NSLog(@"ensureAudioSessionWithRecording: setCategory failed due to: %@", [error localizedDescription]);
+    }
     success = [session setMode:config.mode error:&error];
-    if (!success)
-      NSLog(@"ensureAudioSessionWithRecording[true]: setMode failed due to: %@", error);
+    if (!success) {
+      NSLog(@"ensureAudioSessionWithRecording: Error setting category: %@", [error localizedDescription]);
+    }
     [session unlockForConfiguration];
   }
 }
