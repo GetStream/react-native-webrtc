@@ -78,7 +78,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         String fieldTrials = options.fieldTrials;
 
         PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(reactContext)
-                                                 .setFieldTrials(fieldTrials)
+
+                .setFieldTrials(fieldTrials)
                                                  .setNativeLibraryLoader(new LibraryLoader())
                                                  .setInjectableLogger(injectableLogger, loggingSeverity)
                                                  .createInitializationOptions());
@@ -102,6 +103,15 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         try {
             if (options.audioProcessingFactoryProvider != null) {
                 audioProcessingFactory = options.audioProcessingFactoryProvider.getFactory();
+            }
+        } catch (Exception e) {
+            // do nothing.
+        }
+        
+        AudioProcessingFactory audioProcessingFactory = null;
+        try {
+            if (options.audioProcessingFactoryFactory != null) {
+                audioProcessingFactory = options.audioProcessingFactoryFactory.call();
             }
         } catch (Exception e) {
             // do nothing.
