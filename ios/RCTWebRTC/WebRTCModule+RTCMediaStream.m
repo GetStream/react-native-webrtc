@@ -435,6 +435,8 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(mediaStreamTrackClone : (nonnull NSString
                 }
             }
         }
+        // remove the original track reference
+        [self.localTracks removeObjectForKey:trackID];
         return trackUUID;
     }
     return @"";

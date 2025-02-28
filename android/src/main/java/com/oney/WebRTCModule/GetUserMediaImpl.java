@@ -430,6 +430,9 @@ class GetUserMediaImpl {
         }
         clonedNativeTrack.setEnabled(nativeTrack.enabled());
         tracks.put(id, new TrackPrivate(clonedNativeTrack, track.mediaSource, track.videoCaptureController, track.surfaceTextureHelper));
+        // remove the original track reference
+        TrackPrivate track = tracks.remove(trackId);
+        nativeTrack.dispose();
         return clonedNativeTrack;
     }
 
