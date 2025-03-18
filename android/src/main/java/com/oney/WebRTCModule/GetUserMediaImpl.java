@@ -234,7 +234,9 @@ class GetUserMediaImpl {
             if (enabled) {
                 track.videoCaptureController.startCapture();
             } else {
-                track.videoCaptureController.stopCapture();
+                if (!track.isClone()) {
+                    track.videoCaptureController.stopCapture();
+                }
             }
         }
     }
@@ -530,7 +532,7 @@ class GetUserMediaImpl {
         }
 
         public void dispose() {
-            final boolean isClone = this.parent != null;
+            final boolean isClone = this.isClone();
             if (!disposed) {
                 if (!isClone && videoCaptureController != null) {
                     if (videoCaptureController.stopCapture()) {
@@ -561,6 +563,10 @@ class GetUserMediaImpl {
 
         public void setParent(TrackPrivate parent) {
             this.parent = parent;
+        }
+
+        public boolean isClone() {
+            return this.parent != null;
         }
     }
 
