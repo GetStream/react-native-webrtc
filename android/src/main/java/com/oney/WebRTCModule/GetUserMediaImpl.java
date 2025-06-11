@@ -67,7 +67,9 @@ class GetUserMediaImpl {
         public void onServiceConnected(ComponentName name, IBinder service) {
             // Service is now bound, you can call createScreenStream()
             Log.d(TAG, "MediaProjectionService bound, creating screen stream.");
-            createScreenStream();
+            ThreadUtils.runOnExecutor(() -> {
+                createScreenStream();
+            });
         }
 
         @Override
@@ -93,9 +95,8 @@ class GetUserMediaImpl {
 
                     mediaProjectionPermissionResultData = data;
 
-                    ThreadUtils.runOnExecutor(() -> {
-                        MediaProjectionService.launch(activity, mediaProjectionServiceConnection);
-                    });
+                    MediaProjectionService.launch(activity, mediaProjectionServiceConnection);
+
                 }
             }
         });
