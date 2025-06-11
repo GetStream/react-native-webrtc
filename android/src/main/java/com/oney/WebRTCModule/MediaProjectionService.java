@@ -84,7 +84,8 @@ public class MediaProjectionService extends Service {
 
         Notification notification = MediaProjectionNotification.buildMediaProjectionNotification(this);
 
-        final int id = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
+        final Random random = new Random();
+        final int id = random.nextInt(Integer.MAX_VALUE);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
