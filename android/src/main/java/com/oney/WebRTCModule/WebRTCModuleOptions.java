@@ -21,6 +21,7 @@ public class WebRTCModuleOptions {
     public String fieldTrials;
     public boolean enableMediaProjectionService;
     public AudioProcessingFactoryProvider audioProcessingFactoryProvider;
+    public double defaultTrackVolume = 1.0;
 
     /**
      * Provider for screen share audio bytes. When set, the AudioDeviceModule's
