@@ -165,6 +165,24 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
     }
 
     /**
+     * Internal function which is used to set the video dimensions on video tracks.
+     *
+     * @param width The new width of the video track.
+     * @param height The new height of the video track.
+     */
+    _setVideoTrackDimensions(width: number, height: number) {
+        if (this.kind !== 'video') {
+            throw new Error('Only implemented for video tracks');
+        }
+
+        this._settings = {
+            ...this._settings,
+            width,
+            height
+        };
+    }
+
+    /**
      * Custom API for setting the volume on an individual audio track.
      *
      * @param volume a gain value in the range of 0-10. defaults to 1.0

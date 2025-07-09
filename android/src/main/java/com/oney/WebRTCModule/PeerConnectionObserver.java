@@ -79,6 +79,15 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             }
         }
 
+        // Remove video track adapters for local tracks (from senders)
+        for (RtpSender sender : this.peerConnection.getSenders()) {
+            MediaStreamTrack track = sender.track();
+            if (track instanceof VideoTrack) {
+                videoTrackAdapters.removeAdapter((VideoTrack) track);
+                videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
+            }
+        }
+
         // Remove DataChannel observers
         for (DataChannelWrapper dcw : dataChannels.values()) {
             DataChannel dataChannel = dcw.getDataChannel();

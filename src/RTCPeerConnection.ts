@@ -725,6 +725,24 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
                 track._setMutedInternal(ev.muted);
             }
         });
+
+        addListener(this, 'videoTrackDimensionChanged', (ev: any) => {
+            if (ev.pcId !== this._pcId) {
+                return;
+            }
+
+            // Check both receivers (remote tracks) and senders (local tracks)
+            const [
+                track
+            ] = this.getReceivers()
+                .map(r => r.track)
+                .concat(this.getSenders().map(s => s.track))
+                .filter(t => t?.id === ev.trackId);
+
+            if (track) {
+                track._setVideoTrackDimensions(ev.width, ev.height);
+            }
+        });
     }
 
     /**
