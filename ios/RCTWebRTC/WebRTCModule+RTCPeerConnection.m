@@ -94,6 +94,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionInit
         peerConnection.remoteStreams = [NSMutableDictionary new];
         peerConnection.remoteTracks = [NSMutableDictionary new];
         peerConnection.videoTrackAdapters = [NSMutableDictionary new];
+        peerConnection.videoDimensionDetectors = [NSMutableDictionary new];
         peerConnection.webRTCModule = self;
 
         self.peerConnections[objectID] = peerConnection;
@@ -329,6 +330,7 @@ RCT_EXPORT_METHOD(peerConnectionDispose : (nonnull NSNumber *)objectID) {
         RTCMediaStreamTrack *track = peerConnection.remoteTracks[key];
         if (track.kind == kRTCMediaStreamTrackKindVideo) {
             [peerConnection removeVideoTrackAdapter:(RTCVideoTrack *)track];
+            [peerConnection removeVideoDimensionDetector:(RTCVideoTrack *)track];
         }
     }
 
@@ -877,6 +879,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
             if (track.kind == kRTCMediaStreamTrackKindVideo) {
                 RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
                 [peerConnection addVideoTrackAdapter:videoTrack];
+                [peerConnection addVideoDimensionDetector:videoTrack];
             }
 
             peerConnection.remoteTracks[track.trackId] = track;
