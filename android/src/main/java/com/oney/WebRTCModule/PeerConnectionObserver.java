@@ -75,6 +75,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         for (MediaStreamTrack track : this.remoteTracks.values()) {
             if (track instanceof VideoTrack) {
                 videoTrackAdapters.removeAdapter((VideoTrack) track);
+                videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
             }
         }
 
@@ -432,6 +433,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             if (!existingTrack) {
                 if (track.kind().equals(MediaStreamTrack.VIDEO_TRACK_KIND)) {
                     videoTrackAdapters.addAdapter((VideoTrack) track);
+                    videoTrackAdapters.addDimensionDetector((VideoTrack) track);
                 }
                 remoteTracks.put(track.id(), track);
             }
