@@ -10,6 +10,7 @@
 #import "WebRTCModuleOptions.h"
 #import "WebRTCModule+RTCMediaStream.h"
 #import "WebRTCModule+RTCPeerConnection.h"
+#import "WebRTCModule+VideoTrackAdapter.h"
 
 #import "ProcessorProvider.h"
 #import "ScreenCaptureController.h"

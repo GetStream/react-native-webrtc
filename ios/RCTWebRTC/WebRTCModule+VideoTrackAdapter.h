@@ -1,6 +1,14 @@
 
 #import <WebRTC/RTCPeerConnection.h>
+#import <WebRTC/RTCVideoRenderer.h>
 #import "WebRTCModule.h"
+
+@interface VideoDimensionDetector : NSObject<RTCVideoRenderer>
+
+- (instancetype)initWith:(NSNumber *)peerConnectionId trackId:(NSString *)trackId webRTCModule:(WebRTCModule *)module;
+- (void)dispose;
+
+@end
 
 @interface RTCPeerConnection (VideoTrackAdapter)
 
