@@ -266,9 +266,7 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
                     return;
                 }
 
-                console.log(`[DEBUG] MediaStreamTrack received dimension event: ${ev.width}x${ev.height}`);
                 this._setVideoTrackDimensions(ev.width, ev.height);
-                console.log('[DEBUG] MediaStreamTrack settings after update:', this.getSettings());
             });
         }
     }
