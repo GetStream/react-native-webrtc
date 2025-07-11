@@ -725,26 +725,6 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
                 track._setMutedInternal(ev.muted);
             }
         });
-
-        addListener(this, 'videoTrackDimensionChanged', (ev: any) => {
-            // For local tracks (pcId: -1), process on all peer connections that have the track
-            // For remote tracks, only process on the matching peer connection
-            if (ev.pcId !== -1 && ev.pcId !== this._pcId) {
-                return;
-            }
-
-            // Check both receivers (remote tracks) and senders (local tracks)
-            const [
-                track
-            ] = this.getReceivers()
-                .map(r => r.track)
-                .concat(this.getSenders().map(s => s.track))
-                .filter(t => t?.id === ev.trackId);
-
-            if (track) {
-                track._setVideoTrackDimensions(ev.width, ev.height);
-            }
-        });
     }
 
     /**

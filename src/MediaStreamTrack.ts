@@ -258,6 +258,19 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
 
             this.dispatchEvent(new Event('ended'));
         });
+
+        // Add dimension change listener for local video tracks
+        if (this.kind === 'video') {
+            addListener(this, 'videoTrackDimensionChanged', (ev: any) => {
+                if (ev.trackId !== this.id) {
+                    return;
+                }
+
+                console.log(`[DEBUG] MediaStreamTrack received dimension event: ${ev.width}x${ev.height}`);
+                this._setVideoTrackDimensions(ev.width, ev.height);
+                console.log('[DEBUG] MediaStreamTrack settings after update:', this.getSettings());
+            });
+        }
     }
 
     release(): void {
