@@ -125,13 +125,6 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
  * as a video renderer, which monitors the setSize: method to detect when
  * video dimensions change and emits events accordingly.
  */
-@interface VideoDimensionDetector : NSObject<RTCVideoRenderer>
-
-@property(copy, nonatomic) NSNumber *peerConnectionId;
-@property(copy, nonatomic) NSString *trackId;
-@property(weak, nonatomic) WebRTCModule *module;
-
-@end
 
 @implementation VideoDimensionDetector {
     BOOL _disposed;

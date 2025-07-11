@@ -5,6 +5,10 @@
 
 @interface VideoDimensionDetector : NSObject<RTCVideoRenderer>
 
+@property(copy, nonatomic) NSNumber *peerConnectionId;
+@property(copy, nonatomic) NSString *trackId;
+@property(weak, nonatomic) WebRTCModule *module;
+
 - (instancetype)initWith:(NSNumber *)peerConnectionId trackId:(NSString *)trackId webRTCModule:(WebRTCModule *)module;
 - (void)dispose;
 
