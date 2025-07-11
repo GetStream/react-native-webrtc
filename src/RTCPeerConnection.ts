@@ -727,7 +727,9 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         });
 
         addListener(this, 'videoTrackDimensionChanged', (ev: any) => {
-            if (ev.pcId !== this._pcId) {
+            // For local tracks (pcId: -1), process on all peer connections that have the track
+            // For remote tracks, only process on the matching peer connection
+            if (ev.pcId !== -1 && ev.pcId !== this._pcId) {
                 return;
             }
 

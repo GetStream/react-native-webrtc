@@ -41,7 +41,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     final Map<String, String> remoteStreamIds; // Stream ID -> React tag
     final Map<String, MediaStream> remoteStreams; // React tag -> MediaStream
     final Map<String, MediaStreamTrack> remoteTracks;
-    private final VideoTrackAdapter videoTrackAdapters;
+    final VideoTrackAdapter videoTrackAdapters;
     private final WebRTCModule webRTCModule;
 
     PeerConnectionObserver(WebRTCModule webRTCModule, int id) {
@@ -84,7 +84,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             MediaStreamTrack track = sender.track();
             if (track instanceof VideoTrack) {
                 videoTrackAdapters.removeAdapter((VideoTrack) track);
-                videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
+                // Note: dimension detection for local tracks is cleaned up when track is disposed
             }
         }
 
