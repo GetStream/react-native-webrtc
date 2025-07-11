@@ -66,7 +66,16 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
         this.remote = info.remote;
 
         if (!this.remote) {
+            console.log(
+                `[MediaStreamTrack] Creating LOCAL track - id: ${this.id}, ` +
+                `kind: ${this.kind}, remote: ${this.remote}`
+            );
             this._registerEvents();
+        } else {
+            console.log(
+                `[MediaStreamTrack] Creating REMOTE track - id: ${this.id}, ` +
+                `kind: ${this.kind}, remote: ${this.remote}`
+            );
         }
     }
 
@@ -261,11 +270,32 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
 
         // Add dimension change listener for local video tracks
         if (this.kind === 'video') {
+            console.log(`[MediaStreamTrack] Registering dimension listener for local video track: ${this.id}`);
             addListener(this, 'videoTrackDimensionChanged', (ev: any) => {
-                if (ev.trackId !== this.id) {
+                console.log('[MediaStreamTrack] Received dimension event:', {
+                    trackId: this.id,
+                    eventTrackId: ev.trackId,
+                    pcId: ev.pcId,
+                    width: ev.width,
+                    height: ev.height,
+                    match: ev.trackId === this.id,
+                    isLocal: ev.pcId === -1
+                });
+
+                // Only handle local tracks (pcId === -1) and only for this track
+                if (ev.pcId !== -1 || ev.trackId !== this.id) {
+                    console.log(
+                        `[MediaStreamTrack] Ignoring event - pcId: ${ev.pcId}, ` +
+                        `trackId match: ${ev.trackId === this.id}`
+                    );
+
                     return;
                 }
 
+                console.log(
+                    `[MediaStreamTrack] Processing dimension change for track ${this.id}: ` +
+                    `${ev.width}x${ev.height}`
+                );
                 this._setVideoTrackDimensions(ev.width, ev.height);
             });
         }
