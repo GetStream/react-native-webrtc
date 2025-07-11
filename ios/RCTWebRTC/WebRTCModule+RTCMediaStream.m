@@ -360,7 +360,7 @@ RCT_EXPORT_METHOD(enumerateDevices : (RCTResponseSenderBlock)callback) {
     // Add the detector as a renderer to the track
     [videoTrack addRenderer:detector];
     
-    RCTLogTrace(@"[VideoTrackAdapter] Local dimension detector created for track %@", videoTrack.trackId);
+    RCTLog(@"[VideoTrackAdapter] Local dimension detector created for track %@", videoTrack.trackId);
 }
 
 - (void)removeLocalVideoTrackDimensionDetection:(RTCVideoTrack *)videoTrack {

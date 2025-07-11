@@ -169,12 +169,21 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
 - (void)renderFrame:(nullable RTCVideoFrame *)frame {
     // We don't need to do anything with frames for dimension detection
     // The setSize: method will be called automatically when dimensions change
+    static int frameCount = 0;
+    frameCount++;
+    if (frameCount % 30 == 0) { // Log every 30 frames to avoid spam
+        RCTLog(@"[VideoDimensionDetector] renderFrame called for track %@ (pcId: %@), frame count: %d", 
+               self.trackId, self.peerConnectionId, frameCount);
+    }
 }
 
 - (void)setSize:(CGSize)size {
     if (_disposed) {
         return;
     }
+
+    RCTLog(@"[VideoDimensionDetector] setSize called for track %@ (pcId: %@): %fx%f", 
+           self.trackId, self.peerConnectionId, size.width, size.height);
 
     // Check if this is a meaningful size change
     if (!_hasInitialSize) {
