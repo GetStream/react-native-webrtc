@@ -732,7 +732,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    public void transceiverSetCodecPreferences(int id, String senderId, ReadableArray codecPreferences) {
+    public boolean transceiverSetCodecPreferences(int id, String senderId, ReadableArray codecPreferences) {
         ThreadUtils.runOnExecutor(() -> {
             WritableMap identifier = Arguments.createMap();
             WritableMap params = Arguments.createMap();
@@ -791,6 +791,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 Log.d(TAG, "transceiverSetCodecPreferences(): " + e.getMessage());
             }
         });
+        return true;
     }
 
     @ReactMethod
@@ -1330,7 +1331,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 candidateMap.hasKey("sdpMid") && !candidateMap.isNull("sdpMid") ? candidateMap.getString("sdpMid")  : "",
                 candidateMap.hasKey("sdpMLineIndex") && !candidateMap.isNull("sdpMLineIndex")  ? candidateMap.getInt("sdpMLineIndex") : 0,
                 candidateMap.getString("candidate"));
-            
+
             peerConnection.addIceCandidate(candidate, new AddIceObserver() {
                 @Override
                 public void onAddSuccess() {
