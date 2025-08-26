@@ -24,9 +24,21 @@ import java.util.LinkedHashSet;
 
 /**
  * A patch on top of  https://github.com/GetStream/webrtc/blob/main/sdk/android/api/org/webrtc/WrappedVideoDecoderFactory.java
- * It disables direct-to-SurfaceTextureFrame rendering for c2.exynos.* hardware decoder
+ * It disables direct-to-SurfaceTextureFrame rendering for c2 exynos/qualcomm/mediatek hardware decoder
  */
 public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
+    // Known hardware decoders to have failures when it outputs to a SurfaceTexture directly
+    // Happens possibly when SurfaceTexture data buffer queue is flushed and reused
+    private static final String[] DECODER_DENYLIST_PREFIXES = {
+            "OMX.qcom.",
+            "OMX.hisi.",
+            // https://github.com/androidx/media/issues/2003
+            "c2.exynos.",
+            "c2.qti.",
+            // https://github.com/androidx/media/blob/bfe5930f7f29c6492d60e3d01a90abd3c138b615/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java#L1499
+            "c2.mtk.",
+    };
+
     public WrappedVideoDecoderFactory(@Nullable EglBase.Context eglContext) {
         this.hardwareVideoDecoderFactory = new HardwareVideoDecoderFactory(eglContext);
         this.platformSoftwareVideoDecoderFactory = new PlatformSoftwareVideoDecoderFactory(eglContext);
@@ -59,8 +71,10 @@ public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
     }
 
     private boolean disableSurfaceTextureFrame(String name) {
-        if (name.startsWith("OMX.qcom.") || name.startsWith("OMX.hisi.") || name.startsWith("c2.exynos.")) {
-            return true;
+        for (String prefix : DECODER_DENYLIST_PREFIXES) {
+            if (name.startsWith(prefix)) {
+                return true;
+            }
         }
         return false;
     }
@@ -74,6 +88,6 @@ public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
             supportedCodecInfos.addAll(Arrays.asList(this.platformSoftwareVideoDecoderFactory.getSupportedCodecs()));
         }
 
-        return (VideoCodecInfo[])supportedCodecInfos.toArray(new VideoCodecInfo[supportedCodecInfos.size()]);
+        return supportedCodecInfos.toArray(new VideoCodecInfo[supportedCodecInfos.size()]);
     }
 }
