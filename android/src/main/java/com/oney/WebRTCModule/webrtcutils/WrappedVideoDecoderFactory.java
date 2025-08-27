@@ -28,20 +28,22 @@ import java.util.LinkedHashSet;
  */
 public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
     // Known hardware decoders to have failures when it outputs to a SurfaceTexture directly
-    // Happens possibly when SurfaceTexture data buffer queue is flushed and reused
     private static final String[] DECODER_DENYLIST_PREFIXES = {
             "OMX.qcom.",
             "OMX.hisi.",
             // https://github.com/androidx/media/issues/2003
-            "c2.exynos.",
-            "c2.qti.",
-            // https://github.com/androidx/media/blob/bfe5930f7f29c6492d60e3d01a90abd3c138b615/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java#L1499
-            "c2.mtk.",
+//            "c2.exynos.",
+//            "c2.qti.",
+//            // https://github.com/androidx/media/blob/bfe5930f7f29c6492d60e3d01a90abd3c138b615/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java#L1499
+//            "c2.mtk.",
     };
 
-    public WrappedVideoDecoderFactory(@Nullable EglBase.Context eglContext) {
+    private final boolean forceSWCodec;
+
+    public WrappedVideoDecoderFactory(@Nullable EglBase.Context eglContext, boolean forceSWCodec) {
         this.hardwareVideoDecoderFactory = new HardwareVideoDecoderFactory(eglContext);
         this.platformSoftwareVideoDecoderFactory = new PlatformSoftwareVideoDecoderFactory(eglContext);
+        this.forceSWCodec = forceSWCodec;
     }
 
     private final VideoDecoderFactory hardwareVideoDecoderFactory;
@@ -53,11 +55,13 @@ public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
     @Override
     public VideoDecoder createDecoder(VideoCodecInfo codecType) {
         VideoDecoder softwareDecoder = this.softwareVideoDecoderFactory.createDecoder(codecType);
-        VideoDecoder hardwareDecoder = this.hardwareVideoDecoderFactory.createDecoder(codecType);
+        VideoDecoder hardwareDecoder = null;
+        if (!forceSWCodec) {
+            hardwareDecoder = this.hardwareVideoDecoderFactory.createDecoder(codecType);
+        }
         if (softwareDecoder == null && this.platformSoftwareVideoDecoderFactory != null) {
             softwareDecoder = this.platformSoftwareVideoDecoderFactory.createDecoder(codecType);
         }
-
         if(hardwareDecoder != null && disableSurfaceTextureFrame(hardwareDecoder.getImplementationName())) {
             hardwareDecoder.release();
             hardwareDecoder = this.hardwareVideoDecoderFactoryWithoutEglContext.createDecoder(codecType);
@@ -81,9 +85,11 @@ public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
 
     @Override
     public VideoCodecInfo[] getSupportedCodecs() {
-        LinkedHashSet<VideoCodecInfo> supportedCodecInfos = new LinkedHashSet();
+        LinkedHashSet<VideoCodecInfo> supportedCodecInfos = new LinkedHashSet<>();
         supportedCodecInfos.addAll(Arrays.asList(this.softwareVideoDecoderFactory.getSupportedCodecs()));
-        supportedCodecInfos.addAll(Arrays.asList(this.hardwareVideoDecoderFactory.getSupportedCodecs()));
+        if (!forceSWCodec) {
+            supportedCodecInfos.addAll(Arrays.asList(this.hardwareVideoDecoderFactory.getSupportedCodecs()));
+        }
         if (this.platformSoftwareVideoDecoderFactory != null) {
             supportedCodecInfos.addAll(Arrays.asList(this.platformSoftwareVideoDecoderFactory.getSupportedCodecs()));
         }

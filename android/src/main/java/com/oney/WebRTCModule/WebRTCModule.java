@@ -129,9 +129,11 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     void sendEvent(String eventName, @Nullable ReadableMap params) {
-        getReactApplicationContext()
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                .emit(eventName, params);
+        if (getReactApplicationContext().hasActiveReactInstance()) {
+            getReactApplicationContext()
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit(eventName, params);
+        }
     }
 
     private PeerConnection.IceServer createIceServer(String url) {

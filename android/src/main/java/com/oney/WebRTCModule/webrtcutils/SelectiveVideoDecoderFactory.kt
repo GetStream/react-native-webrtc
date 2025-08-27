@@ -28,7 +28,7 @@ internal class SelectiveVideoDecoderFactory(
     private var forceSWCodecs: List<String> = listOf("VP9", "AV1"),
 ) : VideoDecoderFactory {
     private val softwareVideoDecoderFactory = SoftwareVideoDecoderFactory()
-    private val wrappedVideoDecoderFactory = WrappedVideoDecoderFactory(sharedContext)
+    private val wrappedVideoDecoderFactory = WrappedVideoDecoderFactory(sharedContext, forceSWCodec)
 
     /**
      * Set to true to force software codecs.
@@ -45,22 +45,18 @@ internal class SelectiveVideoDecoderFactory(
     }
 
     override fun createDecoder(videoCodecInfo: VideoCodecInfo): VideoDecoder? {
-        if (forceSWCodec) {
-            return softwareVideoDecoderFactory.createDecoder(videoCodecInfo)
-        }
         if (forceSWCodecs.isNotEmpty()) {
             if (forceSWCodecs.contains(videoCodecInfo.name)) {
                 return softwareVideoDecoderFactory.createDecoder(videoCodecInfo)
             }
         }
+        if (forceSWCodec) {
+            return wrappedVideoDecoderFactory.createDecoder(videoCodecInfo)
+        }
         return wrappedVideoDecoderFactory.createDecoder(videoCodecInfo)
     }
 
     override fun getSupportedCodecs(): Array<VideoCodecInfo> {
-        return if (forceSWCodec && forceSWCodecs.isEmpty()) {
-            softwareVideoDecoderFactory.supportedCodecs
-        } else {
-            wrappedVideoDecoderFactory.supportedCodecs
-        }
+        return wrappedVideoDecoderFactory.supportedCodecs
     }
 }
