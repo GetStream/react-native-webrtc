@@ -1656,7 +1656,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     // Frame Cryptor methods
     ////////////////////////////////
-    RTCFrameCryptor frameCryptor = new RTCFrameCryptor(this);
+    RTCCryptoManager frameCryptor = new RTCCryptoManager(this);
 
     @ReactMethod(isBlockingSynchronousMethod = true)
     public String frameCryptorFactoryCreateFrameCryptor(ReadableMap config) {
@@ -1802,6 +1802,26 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             sb.setLength(sb.length() - 1);
         }
         return sb.toString();
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorFactoryCreateDataPacketCryptor(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorFactoryCreateDataPacketCryptor(params, result);
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorEncrypt(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorEncrypt(params, result);
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorDecrypt(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorDecrypt(params, result);
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorDispose(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorDispose(params, result);
     }
 
     @ReactMethod
