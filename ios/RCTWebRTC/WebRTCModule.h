@@ -22,6 +22,17 @@ static NSString *const kEventVideoTrackDimensionChanged = @"videoTrackDimensionC
 static NSString *const kEventMediaStreamTrackEnded = @"mediaStreamTrackEnded";
 static NSString *const kEventPeerConnectionOnRemoveTrack = @"peerConnectionOnRemoveTrack";
 static NSString *const kEventPeerConnectionOnTrack = @"peerConnectionOnTrack";
+static NSString *const kEventFrameCryptionStateChanged = @"frameCryptionStateChanged";
+static NSString *const kEventAudioDeviceModuleSpeechActivity = @"audioDeviceModuleSpeechActivity";
+static NSString *const kEventAudioDeviceModuleEngineCreated = @"audioDeviceModuleEngineCreated";
+static NSString *const kEventAudioDeviceModuleEngineWillEnable = @"audioDeviceModuleEngineWillEnable";
+static NSString *const kEventAudioDeviceModuleEngineWillStart = @"audioDeviceModuleEngineWillStart";
+static NSString *const kEventAudioDeviceModuleEngineDidStop = @"audioDeviceModuleEngineDidStop";
+static NSString *const kEventAudioDeviceModuleEngineDidDisable = @"audioDeviceModuleEngineDidDisable";
+static NSString *const kEventAudioDeviceModuleEngineWillRelease = @"audioDeviceModuleEngineWillRelease";
+static NSString *const kEventAudioDeviceModuleDevicesUpdated = @"audioDeviceModuleDevicesUpdated";
+
+@class AudioDeviceModuleObserver;
 
 @class AudioDeviceModule;
 
@@ -37,6 +48,13 @@ static NSString *const kEventPeerConnectionOnTrack = @"peerConnectionOnTrack";
 @property(nonatomic, strong) NSMutableDictionary<NSNumber *, RTCPeerConnection *> *peerConnections;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStream *> *localStreams;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStreamTrack *> *localTracks;
+
+@property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptor *> *frameCryptors;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptorKeyProvider *> *keyProviders;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, RTCDataPacketCryptor *> *dataPacketCryptors;
+
+@property(nonatomic, readonly) RTCAudioDeviceModule *audioDeviceModule;
+@property(nonatomic, strong) AudioDeviceModuleObserver *audioDeviceModuleObserver;
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 

@@ -8,6 +8,8 @@ if (WebRTCModule === null) {
     }`);
 }
 
+import { AudioDeviceModule, AudioEngineMuteMode } from './AudioDeviceModule';
+import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
 import mediaDevices from './MediaDevices';
@@ -47,7 +49,10 @@ export {
     type MediaTrackSettings,
     mediaDevices,
     permissions,
-    registerGlobals
+    registerGlobals,
+    AudioDeviceModule,
+    AudioEngineMuteMode,
+    audioDeviceModuleEvents,
 };
 
 declare const global: any;

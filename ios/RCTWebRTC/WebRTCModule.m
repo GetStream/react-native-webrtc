@@ -10,6 +10,7 @@
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
+#import "AudioDeviceModuleObserver.h"
 
 // Import Swift classes
 // We need the following if and elif directives to properly import the generated Swift header for the module,
@@ -113,6 +114,14 @@
         _localStreams = [NSMutableDictionary new];
         _localTracks = [NSMutableDictionary new];
 
+        _frameCryptors = [NSMutableDictionary new];
+        _keyProviders = [NSMutableDictionary new];
+        _dataPacketCryptors = [NSMutableDictionary new];
+
+        _audioDeviceModule = _peerConnectionFactory.audioDeviceModule;
+        _audioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
+        _audioDeviceModule.observer = _audioDeviceModuleObserver;
+
         dispatch_queue_attr_t attributes =
             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
         _workerQueue = dispatch_queue_create("WebRTCModule.queue", attributes);
@@ -157,7 +166,16 @@ RCT_EXPORT_MODULE();
         kEventVideoTrackDimensionChanged,
         kEventMediaStreamTrackEnded,
         kEventPeerConnectionOnRemoveTrack,
-        kEventPeerConnectionOnTrack
+        kEventPeerConnectionOnTrack,
+        kEventFrameCryptionStateChanged,
+        kEventAudioDeviceModuleSpeechActivity,
+        kEventAudioDeviceModuleEngineCreated,
+        kEventAudioDeviceModuleEngineWillEnable,
+        kEventAudioDeviceModuleEngineWillStart,
+        kEventAudioDeviceModuleEngineDidStop,
+        kEventAudioDeviceModuleEngineDidDisable,
+        kEventAudioDeviceModuleEngineWillRelease,
+        kEventAudioDeviceModuleDevicesUpdated
     ];
 }
 
