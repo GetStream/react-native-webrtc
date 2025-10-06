@@ -7,10 +7,10 @@
 #import <React/RCTLog.h>
 #import <React/RCTUtils.h>
 
+#import "AudioDeviceModuleObserver.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
-#import "AudioDeviceModuleObserver.h"
 
 // Import Swift classes
 // We need the following if and elif directives to properly import the generated Swift header for the module,
