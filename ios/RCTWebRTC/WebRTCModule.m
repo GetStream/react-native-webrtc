@@ -77,10 +77,12 @@
                 NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring audioDevice.");
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
-            _peerConnectionFactory = [[RTCPeerConnectionFactory alloc] initWithBypassVoiceProcessing:NO
-                                                                                      encoderFactory:encoderFactory
-                                                                                      decoderFactory:decoderFactory
-                                                                               audioProcessingModule:audioProcessingModule];
+            _peerConnectionFactory =
+                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
+                                                          bypassVoiceProcessing:NO
+                                                                 encoderFactory:encoderFactory
+                                                                 decoderFactory:decoderFactory
+                                                          audioProcessingModule:audioProcessingModule];
         } else {
             RCTLogInfo(@"Using audio device: %@", NSStringFromClass([audioDevice class]));
             _peerConnectionFactory = [[RTCPeerConnectionFactory alloc] initWithEncoderFactory:encoderFactory
