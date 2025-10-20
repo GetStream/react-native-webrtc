@@ -24,7 +24,9 @@ Pod::Spec.new do |s|
   s.dependency          'React-Core'
   
   s.prepare_command = <<-CMD
-    curl -sL "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/#{webrtc_version}/WebRTC.xcframework.zip" -o w.zip && unzip -oq w.zip && rm w.zip
+    curl -sL "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/#{webrtc_version}/WebRTC.xcframework.zip" -o w.zip && \
+    unzip -oq w.zip && rm w.zip && \
+    if [ -f "WebRTC.xcframework.zip" ]; then unzip -oq WebRTC.xcframework.zip && rm WebRTC.xcframework.zip; fi
   CMD
   
   s.vendored_frameworks = 'WebRTC.xcframework'
