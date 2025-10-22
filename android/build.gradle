@@ -70,6 +70,7 @@ android {
         targetSdkVersion safeExtGet('targetSdkVersion', 24)
         versionCode 1
         versionName "1.0"
+        consumerProguardFiles 'consumer-rules.pro'
     }
 
     // WebRTC requires Java 8 features
@@ -86,7 +87,7 @@ println "Building Stream WebRTC React Native module with Kotlin version: $kotlin
 
 dependencies {
     api 'io.getstream:stream-video-webrtc-android:137.0.1'
-    implementation 'com.facebook.react:react-native:+'
+    implementation "com.facebook.react:react-android:+"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "androidx.core:core:1.7.0"
 }
