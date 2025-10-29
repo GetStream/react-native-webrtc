@@ -3,7 +3,7 @@ require 'json'
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
 # WebRTC version from stream-video-swift-webrtc releases
-webrtc_version = '137.0.54'
+webrtc_version = '137.0.42'
 
 Pod::Spec.new do |s|
   s.name                = 'stream-react-native-webrtc'
