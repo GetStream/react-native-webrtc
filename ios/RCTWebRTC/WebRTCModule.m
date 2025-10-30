@@ -78,16 +78,23 @@
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
             _peerConnectionFactory =
-                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
+                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypePlatformDefault
                                                           bypassVoiceProcessing:NO
                                                                  encoderFactory:encoderFactory
                                                                  decoderFactory:decoderFactory
                                                           audioProcessingModule:audioProcessingModule];
-        } else {
-            RCTLogInfo(@"Using audio device: %@", NSStringFromClass([audioDevice class]));
+        } else if (audioDevice != nil) {
+            RCTLogInfo(@"Using custom audio device: %@", NSStringFromClass([audioDevice class]));
             _peerConnectionFactory = [[RTCPeerConnectionFactory alloc] initWithEncoderFactory:encoderFactory
                                                                                decoderFactory:decoderFactory
                                                                                   audioDevice:audioDevice];
+        } else {
+            _peerConnectionFactory =
+                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypePlatformDefault
+                                                          bypassVoiceProcessing:NO
+                                                                 encoderFactory:encoderFactory
+                                                                 decoderFactory:decoderFactory
+                                                          audioProcessingModule:nil];
         }
 
         _peerConnections = [NSMutableDictionary new];
