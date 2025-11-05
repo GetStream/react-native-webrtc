@@ -2,6 +2,9 @@ require 'json'
 
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
+# WebRTC version from stream-video-swift-webrtc releases
+webrtc_version = '137.0.42'
+
 Pod::Spec.new do |s|
   s.name                = 'stream-react-native-webrtc'
   s.version             = package['version']
@@ -19,7 +22,12 @@ Pod::Spec.new do |s|
   s.libraries           = 'c', 'sqlite3', 'stdc++'
   s.framework           = 'AudioToolbox','AVFoundation', 'CoreAudio', 'CoreGraphics', 'CoreVideo', 'GLKit', 'VideoToolbox'
   s.dependency          'React-Core'
-  s.dependency          'StreamWebRTC', '~>125.6422.070'
+  
+  s.prepare_command = <<-CMD
+    curl -sL "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/#{webrtc_version}/WebRTC.xcframework.zip" -o w.zip && unzip -oq w.zip && rm w.zip
+  CMD
+  
+  s.vendored_frameworks = 'WebRTC.xcframework'
   # Swift/Objective-C compatibility #https://blog.cocoapods.org/CocoaPods-1.5.0/
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES'
