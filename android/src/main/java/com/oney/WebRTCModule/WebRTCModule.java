@@ -64,7 +64,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         VideoDecoderFactory decoderFactory = options.videoDecoderFactory;
         Loggable injectableLogger = options.injectableLogger;
         Logging.Severity loggingSeverity = options.loggingSeverity;
-        AudioProcessingFactoryProvider audioProcessingFactoryProvider = options.audioProcessingFactoryProvider;
 
         String fieldTrials = options.fieldTrials;
 
