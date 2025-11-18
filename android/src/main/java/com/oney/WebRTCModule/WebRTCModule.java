@@ -21,8 +21,6 @@ import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-import com.oney.WebRTCModule.audio.AudioProcessingFactoryProvider;
-import com.oney.WebRTCModule.audio.AudioProcessingController;
 import com.oney.WebRTCModule.webrtcutils.SelectiveVideoDecoderFactory;
 
 import org.webrtc.*;
@@ -95,7 +93,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         AudioProcessingFactory audioProcessingFactory = null;
         try {
             if (options.audioProcessingFactoryProvider != null) {
-                audioProcessingFactory = options.audioProcessingFactoryProvider;
+                audioProcessingFactory = options.audioProcessingFactoryProvider.getFactory();
             }
         } catch (Exception e) {
             // do nothing.
