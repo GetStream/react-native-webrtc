@@ -45,31 +45,9 @@ class Permissions {
      */
     _requestPermissionAndroid(perm: Permission) {
         return new Promise(resolve => {
-            let isResolved = false;
-
-            // Set a timeout to handle hanging promise (e.g., "Never ask again" case)
-            const timeout = setTimeout(() => {
-                if (!isResolved) {
-                    isResolved = true;
-                    resolve(false);
-                }
-            }, 5000); // 5 second timeout
-
             PermissionsAndroid.request(perm).then(
-                granted => {
-                    if (!isResolved) {
-                        clearTimeout(timeout);
-                        isResolved = true;
-                        resolve(granted === PermissionsAndroid.RESULTS.GRANTED);
-                    }
-                },
-                () => {
-                    if (!isResolved) {
-                        clearTimeout(timeout);
-                        isResolved = true;
-                        resolve(false);
-                    }
-                }
+                granted => resolve(granted === PermissionsAndroid.RESULTS.GRANTED),
+                () => resolve(false)
             );
         });
     }
