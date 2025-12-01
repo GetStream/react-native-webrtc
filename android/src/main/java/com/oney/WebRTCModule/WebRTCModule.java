@@ -21,8 +21,6 @@ import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-import com.oney.WebRTCModule.audio.AudioProcessingFactoryProvider;
-import com.oney.WebRTCModule.audio.AudioProcessingController;
 import com.oney.WebRTCModule.webrtcutils.SelectiveVideoDecoderFactory;
 
 import org.webrtc.*;
@@ -66,7 +64,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         VideoDecoderFactory decoderFactory = options.videoDecoderFactory;
         Loggable injectableLogger = options.injectableLogger;
         Logging.Severity loggingSeverity = options.loggingSeverity;
-        AudioProcessingFactoryProvider audioProcessingFactoryProvider = options.audioProcessingFactoryProvider;
 
         String fieldTrials = options.fieldTrials;
 
@@ -92,19 +89,28 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             adm = JavaAudioDeviceModule.builder(reactContext).createAudioDeviceModule();
         }
 
+        AudioProcessingFactory audioProcessingFactory = null;
+        try {
+            if (options.audioProcessingFactoryProvider != null) {
+                audioProcessingFactory = options.audioProcessingFactoryProvider.getFactory();
+            }
+        } catch (Exception e) {
+            // do nothing.
+        }
+
         Log.d(TAG, "Using video encoder factory: " + encoderFactory.getClass().getCanonicalName());
         Log.d(TAG, "Using video decoder factory: " + decoderFactory.getClass().getCanonicalName());
 
-        if(audioProcessingFactoryProvider == null) {
-            audioProcessingFactoryProvider = new AudioProcessingController();
+        PeerConnectionFactory.Builder pcFactoryBuilder = PeerConnectionFactory.builder()
+                                                                 .setAudioDeviceModule(adm)
+                                                                 .setVideoEncoderFactory(encoderFactory)
+                                                                 .setVideoDecoderFactory(decoderFactory);
+
+        if (audioProcessingFactory != null) {
+            pcFactoryBuilder.setAudioProcessingFactory(audioProcessingFactory);
         }
 
-        mFactory = PeerConnectionFactory.builder()
-                           .setAudioDeviceModule(adm)
-                           .setVideoEncoderFactory(encoderFactory)
-                           .setVideoDecoderFactory(decoderFactory)
-                           .setAudioProcessingFactory(audioProcessingFactoryProvider.getFactory())
-                           .createPeerConnectionFactory();
+        mFactory = pcFactoryBuilder.createPeerConnectionFactory();
 
         // PeerConnectionFactory now owns the adm native pointer, and we don't need it anymore.
         adm.release();
@@ -125,6 +131,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     public AudioDeviceModule getAudioDeviceModule() {
         return mAudioDeviceModule;
+    }
+
+    public PeerConnectionObserver getPeerConnectionObserver(int id) {
+        return mPeerConnectionObservers.get(id);
     }
 
     private PeerConnection getPeerConnection(int id) {
