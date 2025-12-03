@@ -78,7 +78,7 @@
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
             _peerConnectionFactory =
-                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypePlatformDefault
+                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
                                                                  encoderFactory:encoderFactory
                                                                  decoderFactory:decoderFactory
@@ -90,7 +90,7 @@
                                                                                   audioDevice:audioDevice];
         } else {
             _peerConnectionFactory =
-                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypePlatformDefault
+                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
                                                                  encoderFactory:encoderFactory
                                                                  decoderFactory:decoderFactory
