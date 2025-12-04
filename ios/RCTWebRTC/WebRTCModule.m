@@ -11,6 +11,9 @@
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
 
+// Import Swift classes
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+
 @interface WebRTCModule ()
 @end
 
@@ -96,6 +99,8 @@
                                                                  decoderFactory:decoderFactory
                                                           audioProcessingModule:nil];
         }
+
+        _peerConnectionFactory.audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule];
 
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
