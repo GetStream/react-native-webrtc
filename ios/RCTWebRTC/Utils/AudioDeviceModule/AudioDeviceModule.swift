@@ -111,56 +111,56 @@ import WebRTC
     /// Tracks whether WebRTC is currently playing back audio.
     private let isPlayingSubject: CurrentValueSubject<Bool, Never>
     /// `true` while audio playout is active.
-    var isPlaying: Bool { isPlayingSubject.value }
+    @objc public var isPlaying: Bool { isPlayingSubject.value }
     /// Publisher that reflects playout activity changes.
     var isPlayingPublisher: AnyPublisher<Bool, Never> { isPlayingSubject.eraseToAnyPublisher() }
 
     /// Tracks whether WebRTC is capturing microphone samples.
     private let isRecordingSubject: CurrentValueSubject<Bool, Never>
     /// `true` while audio capture is active.
-    var isRecording: Bool { isRecordingSubject.value }
+    @objc public var isRecording: Bool { isRecordingSubject.value }
     /// Publisher that reflects recording activity changes.
     var isRecordingPublisher: AnyPublisher<Bool, Never> { isRecordingSubject.eraseToAnyPublisher() }
 
     /// Tracks whether the microphone is muted at the ADM layer.
     private let isMicrophoneMutedSubject: CurrentValueSubject<Bool, Never>
     /// `true` if the microphone is muted.
-    var isMicrophoneMuted: Bool { isMicrophoneMutedSubject.value }
+    @objc public var isMicrophoneMuted: Bool { isMicrophoneMutedSubject.value }
     /// Publisher that reflects microphone mute changes.
     var isMicrophoneMutedPublisher: AnyPublisher<Bool, Never> { isMicrophoneMutedSubject.eraseToAnyPublisher() }
 
     /// Tracks whether stereo playout is configured.
     private let isStereoPlayoutEnabledSubject: CurrentValueSubject<Bool, Never>
     /// `true` if stereo playout is available and active.
-    var isStereoPlayoutEnabled: Bool { isStereoPlayoutEnabledSubject.value }
+    @objc public var isStereoPlayoutEnabled: Bool { isStereoPlayoutEnabledSubject.value }
     /// Publisher emitting stereo playout state.
     var isStereoPlayoutEnabledPublisher: AnyPublisher<Bool, Never> { isStereoPlayoutEnabledSubject.eraseToAnyPublisher() }
 
     /// Tracks whether VP processing is currently bypassed.
     private let isVoiceProcessingBypassedSubject: CurrentValueSubject<Bool, Never>
     /// `true` if the voice processing unit is bypassed.
-    var isVoiceProcessingBypassed: Bool { isVoiceProcessingBypassedSubject.value }
+    @objc public var isVoiceProcessingBypassed: Bool { isVoiceProcessingBypassedSubject.value }
     /// Publisher emitting VP bypass changes.
     var isVoiceProcessingBypassedPublisher: AnyPublisher<Bool, Never> { isVoiceProcessingBypassedSubject.eraseToAnyPublisher() }
 
     /// Tracks whether voice processing is enabled.
     private let isVoiceProcessingEnabledSubject: CurrentValueSubject<Bool, Never>
     /// `true` when Apple VP is active.
-    var isVoiceProcessingEnabled: Bool { isVoiceProcessingEnabledSubject.value }
+    @objc public var isVoiceProcessingEnabled: Bool { isVoiceProcessingEnabledSubject.value }
     /// Publisher emitting VP enablement changes.
     var isVoiceProcessingEnabledPublisher: AnyPublisher<Bool, Never> { isVoiceProcessingEnabledSubject.eraseToAnyPublisher() }
 
     /// Tracks whether automatic gain control is enabled inside VP.
     private let isVoiceProcessingAGCEnabledSubject: CurrentValueSubject<Bool, Never>
     /// `true` while AGC is active.
-    var isVoiceProcessingAGCEnabled: Bool { isVoiceProcessingAGCEnabledSubject.value }
+    @objc public var isVoiceProcessingAGCEnabled: Bool { isVoiceProcessingAGCEnabledSubject.value }
     /// Publisher emitting AGC changes.
     var isVoiceProcessingAGCEnabledPublisher: AnyPublisher<Bool, Never> { isVoiceProcessingAGCEnabledSubject.eraseToAnyPublisher() }
 
     /// Observes RMS audio levels (in dB) derived from the input tap.
     private let audioLevelSubject = CurrentValueSubject<Float, Never>(Constant.silenceDB) // default to silence
     /// Latest measured audio level.
-    var audioLevel: Float { audioLevelSubject.value }
+    @objc public var audioLevel: Float { audioLevelSubject.value }
     /// Publisher emitting audio level updates.
     var audioLevelPublisher: AnyPublisher<Float, Never> { audioLevelSubject.eraseToAnyPublisher() }
 
@@ -177,10 +177,10 @@ import WebRTC
     let publisher: AnyPublisher<Event, Never>
 
     /// Strong reference to the current engine so we can introspect it if needed.
-    private var engine: AVAudioEngine?
+    @objc public var engine: AVAudioEngine?
 
     /// Textual diagnostics for logging and debugging.
-    public override var description: String {
+    @objc public override var description: String {
         "{ " +
             "isPlaying:\(isPlaying)" +
             ", isRecording:\(isRecording)" +
@@ -235,14 +235,14 @@ import WebRTC
     // MARK: - Recording
 
     /// Reinitializes the ADM, clearing its internal audio graph state.
-    func reset() {
+    @objc public func reset() {
         _ = source.reset()
     }
 
     /// Switches between stereo and mono playout while keeping the recording
     /// state consistent across reinitializations.
     /// - Parameter isPreferred: `true` when stereo output should be used.
-    func setStereoPlayoutPreference(_ isPreferred: Bool) {
+    @objc public func setStereoPlayoutPreference(_ isPreferred: Bool) {
         /// - Important: `.voiceProcessing` requires VP to be enabled in order to mute and
         /// `.restartEngine` rebuilds the whole graph. Each of them has different issues:
         /// - `.voiceProcessing`: as it requires VP to be enabled in order to mute/unmute that
@@ -259,7 +259,7 @@ import WebRTC
     /// Starts or stops speaker playout on the ADM, retrying transient failures.
     /// - Parameter isActive: `true` to start playout, `false` to stop.
     /// - Throws: `AudioDeviceError` when WebRTC returns a non-zero status.
-    func setPlayout(_ isActive: Bool) throws {
+    @objc public func setPlayout(_ isActive: Bool) throws {
         guard isActive != isPlaying else {
             return
         }
@@ -283,7 +283,7 @@ import WebRTC
     /// Enables or disables recording on the wrapped audio device module.
     /// - Parameter isEnabled: When `true` recording starts, otherwise stops.
     /// - Throws: `AudioDeviceError` when the underlying module reports a failure.
-    func setRecording(_ isEnabled: Bool) throws {
+    @objc public func setRecording(_ isEnabled: Bool) throws {
         guard isEnabled != isRecording else {
             return
         }
@@ -309,7 +309,7 @@ import WebRTC
     /// Updates the muted state of the microphone for the wrapped module.
     /// - Parameter isMuted: `true` to mute the microphone, `false` to unmute.
     /// - Throws: `AudioDeviceError` when the underlying module reports a failure.
-    func setMuted(_ isMuted: Bool) throws {
+    @objc public func setMuted(_ isMuted: Bool) throws {
         guard isMuted != source.isMicrophoneMuted else {
             return
         }
@@ -326,7 +326,7 @@ import WebRTC
     }
 
     /// Forces the ADM to recompute whether stereo output is supported.
-    func refreshStereoPlayoutState() {
+    @objc public func refreshStereoPlayoutState() {
         source.refreshStereoPlayoutState()
     }
 
