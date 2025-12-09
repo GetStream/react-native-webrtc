@@ -1,5 +1,6 @@
 package com.oney.WebRTCModule;
 
+import android.os.Build;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -82,11 +83,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             EglBase.Context eglContext = EglUtils.getRootEglBaseContext();
             encoderFactory = new SimulcastAlignedVideoEncoderFactory(eglContext, true, true, ResolutionAdjustment.MULTIPLE_OF_16);
             decoderFactory = new SelectiveVideoDecoderFactory(eglContext, false, Arrays.asList("VP9", "AV1"));
-
         }
 
         if (adm == null) {
-            adm = JavaAudioDeviceModule.builder(reactContext).createAudioDeviceModule();
+            adm = createAudioDeviceModule(reactContext);
         }
 
         AudioProcessingFactory audioProcessingFactory = null;
@@ -121,6 +121,15 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         mAudioDeviceModule = adm;
 
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
+    }
+
+    private JavaAudioDeviceModule createAudioDeviceModule(ReactApplicationContext reactContext) {
+        return JavaAudioDeviceModule
+                .builder(reactContext)
+                .setUseHardwareAcousticEchoCanceler(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                .setUseHardwareNoiseSuppressor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                .setUseStereoOutput(true)
+                .createAudioDeviceModule();
     }
 
     @NonNull
