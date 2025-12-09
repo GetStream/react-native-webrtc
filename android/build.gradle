@@ -36,8 +36,6 @@ repositories {
     google()
 }
 
-
-
 def safeExtGet(prop, fallback) {
     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
 }
