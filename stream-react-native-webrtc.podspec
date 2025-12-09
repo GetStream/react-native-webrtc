@@ -15,12 +15,13 @@ Pod::Spec.new do |s|
   s.platform            = :ios, '13.0'
 
   s.preserve_paths      = 'ios/**/*'
-  s.source_files        = 'ios/**/*.{h,m}'
+  s.source_files        = 'ios/**/*.{h,m,mm,swift}'
   s.libraries           = 'c', 'sqlite3', 'stdc++'
   s.framework           = 'AudioToolbox','AVFoundation', 'CoreAudio', 'CoreGraphics', 'CoreVideo', 'GLKit', 'VideoToolbox'
+  s.swift_version       = '5.0'
   s.dependency          'React-Core'
   # WebRTC version from https://github.com/GetStream/stream-video-swift-webrtc releases
-  s.dependency          'StreamWebRTC', '~>137.0.52'
+  s.dependency          'StreamWebRTC', '~>137.0.54'
   # Swift/Objective-C compatibility #https://blog.cocoapods.org/CocoaPods-1.5.0/
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES'
