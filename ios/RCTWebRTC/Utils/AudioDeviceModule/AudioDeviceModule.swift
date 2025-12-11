@@ -92,10 +92,10 @@ import WebRTC
                 return ".willReleaseAudioEngine(\(engine))"
 
             case .configureInputFromSource(let engine, let source, let destination, let format):
-                return ".configureInputFromSource(\(engine), source:\(source), destination:\(destination), format:\(format))"
+                return ".configureInputFromSource(\(engine), source:\(source?.description ?? "nil"), destination:\(destination), format:\(format))"
 
             case .configureOutputFromSource(let engine, let source, let destination, let format):
-                return ".configureOutputFromSource(\(engine), source:\(source), destination:\(destination), format:\(format))"
+                return ".configureOutputFromSource(\(engine), source:\(source), destination:\(destination?.description ?? "nil"), format:\(format))"
 
             case let .didUpdateAudioProcessingState(
                 voiceProcessingEnabled,
