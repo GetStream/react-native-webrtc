@@ -12,7 +12,14 @@
 #import "WebRTCModuleOptions.h"
 
 // Import Swift classes
+// We need the following if and elif directives to properly import the generated Swift header for the module,
+// handling both cases where CocoaPods module import path is available and where it is not.
+// This ensures compatibility regardless of whether the project is built with frameworks enabled or as static libraries.
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
 #import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
 
 @interface WebRTCModule ()
 @end
