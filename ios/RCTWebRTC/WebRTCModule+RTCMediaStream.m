@@ -636,9 +636,7 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects:(nonnull NSString *)trackID na
     [session lockForConfiguration];
     config.category = AVAudioSessionCategoryPlayAndRecord;
     config.categoryOptions =
-             AVAudioSessionCategoryOptionAllowAirPlay|
              AVAudioSessionCategoryOptionAllowBluetooth|
-             AVAudioSessionCategoryOptionAllowBluetoothA2DP|
              AVAudioSessionCategoryOptionDefaultToSpeaker;
     config.mode = AVAudioSessionModeVideoChat;
     NSError* error = nil;
