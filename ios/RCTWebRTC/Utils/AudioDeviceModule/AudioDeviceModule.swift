@@ -223,6 +223,7 @@ import WebRTC
         source.observer = self
 
         source.isVoiceProcessingBypassed = true
+        isVoiceProcessingBypassedSubject.send(true)
     }
     
     /// Objective-C compatible convenience initializer.
