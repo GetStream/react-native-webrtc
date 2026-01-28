@@ -147,7 +147,6 @@
     return @[ mediaStreamId, trackInfos ];
 #endif
 }
-
 /**
  * Initializes a new {@link RTCVideoTrack} which satisfies the given constraints.
  */
@@ -486,7 +485,9 @@ RCT_EXPORT_METHOD(mediaStreamTrackRelease : (nonnull NSString *)trackID) {
             [[self audioDeviceModule] setRecording:false error:nil];
         }
         
-//        track.isEnabled = NO;
+        if (track.isEnabled) {
+            track.isEnabled = NO;
+        }
         [track.captureController stopCapture];
         [self.localTracks removeObjectForKey:trackID];
     }
@@ -549,7 +550,6 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
         if (track) {
             [[self audioDeviceModule] setRecording:enabled error:nil];
         }
-        return;
     }
     
     track.isEnabled = enabled;
