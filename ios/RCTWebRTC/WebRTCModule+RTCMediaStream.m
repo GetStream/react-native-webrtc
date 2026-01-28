@@ -481,9 +481,12 @@ RCT_EXPORT_METHOD(mediaStreamTrackRelease : (nonnull NSString *)trackID) {
         // Clean up dimension detection for local video tracks
         if ([track.kind isEqualToString:@"video"]) {
             [self removeLocalVideoTrackDimensionDetection:(RTCVideoTrack *)track];
+        } else {
+            // disable recording for local audio tracks
+            [[self audioDeviceModule] setRecording:false error:nil];
         }
         
-        track.isEnabled = NO;
+//        track.isEnabled = NO;
         [track.captureController stopCapture];
         [self.localTracks removeObjectForKey:trackID];
     }
@@ -542,10 +545,15 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
     }
 
     if ([track.kind isEqual:@"audio"]) {
-        [[self audioDeviceModule] setRecording:enabled error:nil];
-    } else {
-        track.isEnabled = enabled;
+        RTCMediaStreamTrack *track = self.localTracks[trackID];
+        if (track) {
+            [[self audioDeviceModule] setRecording:enabled error:nil];
+        }
+        return;
     }
+    
+    track.isEnabled = enabled;
+    
 
 #if !TARGET_OS_TV
     if (track.captureController) {  // It could be a remote track!
