@@ -18,6 +18,12 @@
 #import "TrackCapturerEventsEmitter.h"
 #import "VideoCaptureController.h"
 
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
+
 @implementation WebRTCModule (RTCMediaStream)
 
 - (VideoEffectProcessor *)videoEffectProcessor
@@ -141,7 +147,6 @@
     return @[ mediaStreamId, trackInfos ];
 #endif
 }
-
 /**
  * Initializes a new {@link RTCVideoTrack} which satisfies the given constraints.
  */
@@ -475,9 +480,14 @@ RCT_EXPORT_METHOD(mediaStreamTrackRelease : (nonnull NSString *)trackID) {
         // Clean up dimension detection for local video tracks
         if ([track.kind isEqualToString:@"video"]) {
             [self removeLocalVideoTrackDimensionDetection:(RTCVideoTrack *)track];
+        } else {
+            // disable recording for local audio tracks
+            [[self audioDeviceModule] setRecording:false error:nil];
         }
         
-        track.isEnabled = NO;
+        if (track.isEnabled) {
+            track.isEnabled = NO;
+        }
         [track.captureController stopCapture];
         [self.localTracks removeObjectForKey:trackID];
     }
@@ -535,7 +545,16 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
         return;
     }
 
+    if ([track.kind isEqual:@"audio"]) {
+        RTCMediaStreamTrack *track = self.localTracks[trackID];
+        if (track) {
+            [[self audioDeviceModule] setRecording:enabled error:nil];
+        }
+    }
+    
     track.isEnabled = enabled;
+    
+
 #if !TARGET_OS_TV
     if (track.captureController) {  // It could be a remote track!
         if (enabled) {
