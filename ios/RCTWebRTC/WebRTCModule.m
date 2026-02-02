@@ -107,7 +107,9 @@
                                                           audioProcessingModule:nil];
         }
 
-        _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule];
+        RTCAudioDeviceModule *source = _peerConnectionFactory.audioDeviceModule;
+        [source setVoiceProcessingEnabled:NO];
+        _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:source];
 
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
