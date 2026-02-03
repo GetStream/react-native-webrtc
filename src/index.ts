@@ -8,7 +8,6 @@ if (WebRTCModule === null) {
     }`);
 }
 
-import { AudioDeviceModule, AudioEngineMuteMode, type AudioEngineAvailability } from './AudioDeviceModule';
 import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
@@ -33,6 +32,9 @@ Logger.enable(`${Logger.ROOT_PREFIX}:*`);
 // Add listeners for the native events early, since they are added asynchronously.
 setupNativeEvents();
 
+// Ensure audioDeviceModuleEvents is initialized and event listeners are registered
+audioDeviceModuleEvents.setupListeners();
+
 export {
     RTCIceCandidate,
     RTCPeerConnection,
@@ -50,9 +52,6 @@ export {
     mediaDevices,
     permissions,
     registerGlobals,
-    AudioDeviceModule,
-    AudioEngineMuteMode,
-    type AudioEngineAvailability,
     audioDeviceModuleEvents,
 };
 
@@ -84,7 +83,4 @@ function registerGlobals(): void {
     global.RTCRtpReceiver = RTCRtpReceiver;
     global.RTCRtpSender = RTCRtpSender;
     global.RTCErrorEvent = RTCErrorEvent;
-
-    // Ensure audioDeviceModuleEvents is initialized and event listeners are registered
-    audioDeviceModuleEvents.setupListeners();
 }

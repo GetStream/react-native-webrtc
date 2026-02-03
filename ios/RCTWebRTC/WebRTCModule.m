@@ -23,6 +23,9 @@
 #endif
 
 @interface WebRTCModule ()
+
+@property(nonatomic, strong) AudioDeviceModuleObserver *rtcAudioDeviceModuleObserver;
+
 @end
 
 @implementation WebRTCModule
@@ -107,8 +110,10 @@
                                                                  decoderFactory:decoderFactory
                                                           audioProcessingModule:nil];
         }
-
-        _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule];
+        
+        _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
+        _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
+                                                      delegateObserver:_rtcAudioDeviceModuleObserver];
 
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
@@ -117,10 +122,6 @@
         _frameCryptors = [NSMutableDictionary new];
         _keyProviders = [NSMutableDictionary new];
         _dataPacketCryptors = [NSMutableDictionary new];
-
-        _audioDeviceModule = _peerConnectionFactory.audioDeviceModule;
-        _audioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
-        _audioDeviceModule.observer = _audioDeviceModuleObserver;
 
         dispatch_queue_attr_t attributes =
             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
@@ -175,7 +176,8 @@ RCT_EXPORT_MODULE();
         kEventAudioDeviceModuleEngineDidStop,
         kEventAudioDeviceModuleEngineDidDisable,
         kEventAudioDeviceModuleEngineWillRelease,
-        kEventAudioDeviceModuleDevicesUpdated
+        kEventAudioDeviceModuleDevicesUpdated,
+        kEventAudioDeviceModuleAudioProcessingStateUpdated
     ];
 }
 

@@ -31,8 +31,7 @@ static NSString *const kEventAudioDeviceModuleEngineDidStop = @"audioDeviceModul
 static NSString *const kEventAudioDeviceModuleEngineDidDisable = @"audioDeviceModuleEngineDidDisable";
 static NSString *const kEventAudioDeviceModuleEngineWillRelease = @"audioDeviceModuleEngineWillRelease";
 static NSString *const kEventAudioDeviceModuleDevicesUpdated = @"audioDeviceModuleDevicesUpdated";
-
-@class AudioDeviceModuleObserver;
+static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated = @"audioDeviceModuleAudioProcessingStateUpdated";
 
 @class AudioDeviceModule;
 
@@ -52,9 +51,6 @@ static NSString *const kEventAudioDeviceModuleDevicesUpdated = @"audioDeviceModu
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptor *> *frameCryptors;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptorKeyProvider *> *keyProviders;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCDataPacketCryptor *> *dataPacketCryptors;
-
-@property(nonatomic, readonly) RTCAudioDeviceModule *audioDeviceModule;
-@property(nonatomic, strong) AudioDeviceModuleObserver *audioDeviceModuleObserver;
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 
