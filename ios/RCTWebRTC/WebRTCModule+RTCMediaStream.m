@@ -30,6 +30,25 @@
   objc_setAssociatedObject(self, @selector(videoEffectProcessor), videoEffectProcessor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
+#pragma mark - Default Media Constraints
+
+/**
+ * Returns common optional constraints for improved audio quality.
+ * Ported from stream-video-swift DefaultRTCMediaConstraints.
+ * https://github.com/GetStream/stream-video-swift/blob/develop/Sources/StreamVideo/WebRTC/DefaultRTCMediaConstraints.swift
+ */
++ (NSDictionary *)commonOptionalConstraints {
+    return @{
+        @"DtlsSrtpKeyAgreement": kRTCMediaConstraintsValueTrue,
+        @"googAutoGainControl": kRTCMediaConstraintsValueTrue,
+        @"googNoiseSuppression": kRTCMediaConstraintsValueTrue,
+        @"googEchoCancellation": kRTCMediaConstraintsValueTrue,
+        @"googHighpassFilter": kRTCMediaConstraintsValueTrue,
+        @"googTypingNoiseDetection": kRTCMediaConstraintsValueTrue,
+        @"googAudioMirroring": kRTCMediaConstraintsValueFalse
+    };
+}
+
 #pragma mark - getUserMedia
 
 - (NSString *)convertBoolToString:(id)value {
@@ -45,19 +64,23 @@
 - (RTCAudioTrack *)createAudioTrack:(NSDictionary *)constraints {
     NSString *trackId = [[NSUUID UUID] UUIDString];
     NSDictionary *audioConstraints = constraints[@"audio"];
-    NSMutableDictionary *optionalConstraints = [NSMutableDictionary dictionary];
-    optionalConstraints[@"googAutoGainControl"] = audioConstraints[@"autoGainControl"] != nil
-                                                      ? [self convertBoolToString:audioConstraints[@"autoGainControl"]]
-                                                      : @"true";
-    optionalConstraints[@"googNoiseSuppression"] =
-        audioConstraints[@"noiseSuppression"] != nil ? [self convertBoolToString:audioConstraints[@"noiseSuppression"]]
-                                                     : @"true";
-    optionalConstraints[@"googEchoCancellation"] =
-        audioConstraints[@"echoCancellation"] != nil ? [self convertBoolToString:audioConstraints[@"echoCancellation"]]
-                                                     : @"true";
-    optionalConstraints[@"googHighpassFilter"] = audioConstraints[@"highpassFilter"] != nil
-                                                     ? [self convertBoolToString:audioConstraints[@"highpassFilter"]]
-                                                     : @"true";
+
+    // Start with common optional constraints as defaults
+    NSMutableDictionary *optionalConstraints = [[[self class] commonOptionalConstraints] mutableCopy];
+
+    // Override with user-provided constraints if specified
+    if (audioConstraints[@"autoGainControl"] != nil) {
+        optionalConstraints[@"googAutoGainControl"] = [self convertBoolToString:audioConstraints[@"autoGainControl"]];
+    }
+    if (audioConstraints[@"noiseSuppression"] != nil) {
+        optionalConstraints[@"googNoiseSuppression"] = [self convertBoolToString:audioConstraints[@"noiseSuppression"]];
+    }
+    if (audioConstraints[@"echoCancellation"] != nil) {
+        optionalConstraints[@"googEchoCancellation"] = [self convertBoolToString:audioConstraints[@"echoCancellation"]];
+    }
+    if (audioConstraints[@"highpassFilter"] != nil) {
+        optionalConstraints[@"googHighpassFilter"] = [self convertBoolToString:audioConstraints[@"highpassFilter"]];
+    }
 
     RTCMediaConstraints *mediaConstraints =
         [[RTCMediaConstraints alloc] initWithMandatoryConstraints:nil optionalConstraints:optionalConstraints];
