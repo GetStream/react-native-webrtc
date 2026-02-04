@@ -1,5 +1,5 @@
 //
-// Copyright © 2025 Stream.io Inc. All rights reserved.
+// Copyright © 2026 Stream.io Inc. All rights reserved.
 //
 
 import AudioToolbox
@@ -92,7 +92,7 @@ import WebRTC
                 return ".willReleaseAudioEngine(\(engine))"
 
             case .configureInputFromSource(let engine, let source, let destination, let format):
-                return ".configureInputFromSource(\(engine), source:\(source?.description ?? "nil"), destination:\(destination), format:\(format))"
+                return ".configureInputFromSource(\(engine), source:\(source), destination:\(destination), format:\(format))"
 
             case .configureOutputFromSource(let engine, let source, let destination, let format):
                 return ".configureOutputFromSource(\(engine), source:\(source), destination:\(destination?.description ?? "nil"), format:\(format))"
@@ -221,9 +221,6 @@ import WebRTC
 
         audioLevelsAdapter.subject = audioLevelSubject
         source.observer = self
-
-        source.isVoiceProcessingBypassed = true
-        isVoiceProcessingBypassedSubject.send(true)
     }
     
     /// Objective-C compatible convenience initializer.
@@ -255,6 +252,7 @@ import WebRTC
         /// sendAudio capability.
         _ = source.setRecordingAlwaysPreparedMode(false)
         source.prefersStereoPlayout = isPreferred
+        source.isVoiceProcessingBypassed = isPreferred
     }
 
     /// Starts or stops speaker playout on the ADM, retrying transient failures.
