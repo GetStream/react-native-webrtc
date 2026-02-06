@@ -8,6 +8,7 @@ if (WebRTCModule === null) {
     }`);
 }
 
+import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
 import mediaDevices from './MediaDevices';
@@ -31,6 +32,9 @@ Logger.enable(`${Logger.ROOT_PREFIX}:*`);
 // Add listeners for the native events early, since they are added asynchronously.
 setupNativeEvents();
 
+// Ensure audioDeviceModuleEvents is initialized and event listeners are registered
+audioDeviceModuleEvents.setupListeners();
+
 export {
     RTCIceCandidate,
     RTCPeerConnection,
@@ -47,7 +51,8 @@ export {
     type MediaTrackSettings,
     mediaDevices,
     permissions,
-    registerGlobals
+    registerGlobals,
+    audioDeviceModuleEvents,
 };
 
 declare const global: any;
