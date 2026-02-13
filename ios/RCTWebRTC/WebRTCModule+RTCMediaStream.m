@@ -164,7 +164,6 @@
     return @[ mediaStreamId, trackInfos ];
 #endif
 }
-
 /**
  * Initializes a new {@link RTCVideoTrack} which satisfies the given constraints.
  */
@@ -495,12 +494,13 @@ RCT_EXPORT_METHOD(mediaStreamTrackRelease : (nonnull NSString *)trackID) {
 
     RTCMediaStreamTrack *track = self.localTracks[trackID];
     if (track) {
-        // Clean up dimension detection for local video tracks
         if ([track.kind isEqualToString:@"video"]) {
+            // Clean up dimension detection for local video tracks
             [self removeLocalVideoTrackDimensionDetection:(RTCVideoTrack *)track];
         }
-        
-        track.isEnabled = NO;
+        if (track.isEnabled) {
+            track.isEnabled = NO;
+        }
         [track.captureController stopCapture];
         [self.localTracks removeObjectForKey:trackID];
     }
@@ -559,6 +559,7 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
     }
 
     track.isEnabled = enabled;
+
 #if !TARGET_OS_TV
     if (track.captureController) {  // It could be a remote track!
         if (enabled) {

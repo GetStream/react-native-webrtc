@@ -179,6 +179,10 @@ import WebRTC
     /// Strong reference to the current engine so we can introspect it if needed.
     @objc public var engine: AVAudioEngine?
 
+    /// Secondary observer that receives forwarded delegate callbacks.
+    /// This allows the AudioDeviceModuleObserver to receive events and forward them to JS.
+    private let delegateObserver: RTCAudioDeviceModuleDelegate
+
     /// Textual diagnostics for logging and debugging.
     @objc public override var description: String {
         "{ " +
@@ -195,12 +199,17 @@ import WebRTC
     }
 
     /// Creates a module that mirrors the provided WebRTC audio device module.
-    /// - Parameter source: The audio device module implementation to observe.
+    /// - Parameters:
+    ///   - source: The audio device module implementation to observe.
+    ///   - delegateObserver: The observer that receives forwarded delegate callbacks.
+    ///   - audioLevelsNodeAdapter: Adapter for audio level monitoring.
     init(
         _ source: any RTCAudioDeviceModuleControlling,
+        delegateObserver: RTCAudioDeviceModuleDelegate,
         audioLevelsNodeAdapter: AudioEngineNodeAdapting = AudioEngineLevelNodeAdapter()
     ) {
         self.source = source
+        self.delegateObserver = delegateObserver
         self.isPlayingSubject = .init(source.isPlaying)
         self.isRecordingSubject = .init(source.isRecording)
         self.isMicrophoneMutedSubject = .init(source.isMicrophoneMuted)
@@ -219,15 +228,18 @@ import WebRTC
             .eraseToAnyPublisher()
         super.init()
 
+        _ = source.setMuteMode(.inputMixer)
         audioLevelsAdapter.subject = audioLevelSubject
         source.observer = self
     }
     
     /// Objective-C compatible convenience initializer.
-    /// - Parameter source: The RTCAudioDeviceModule to wrap.
+    /// - Parameters:
+    ///   - source: The RTCAudioDeviceModule to wrap.
+    ///   - delegateObserver: The observer that receives forwarded delegate callbacks.
     @objc public
-    convenience init(source: RTCAudioDeviceModule) {
-        self.init(source as any RTCAudioDeviceModuleControlling, audioLevelsNodeAdapter: AudioEngineLevelNodeAdapter())
+    convenience init(source: RTCAudioDeviceModule, delegateObserver: RTCAudioDeviceModuleDelegate) {
+        self.init(source as any RTCAudioDeviceModuleControlling, delegateObserver: delegateObserver, audioLevelsNodeAdapter: AudioEngineLevelNodeAdapter())
     }
 
     // MARK: - Recording
@@ -235,6 +247,7 @@ import WebRTC
     /// Reinitializes the ADM, clearing its internal audio graph state.
     @objc public func reset() {
         _ = source.reset()
+        _ = source.setMuteMode(.inputMixer)
     }
 
     /// Switches between stereo and mono playout while keeping the recording
@@ -247,7 +260,7 @@ import WebRTC
         /// means that for outputs where VP is disabled (e.g. stereo) we cannot mute/unmute.
         /// - `.restartEngine`: rebuilds the whole graph and requires explicit calling of
         /// `initAndStartRecording` .
-        _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
+        // _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
         /// - Important: We can probably set this one to false when the user doesn't have
         /// sendAudio capability.
         _ = source.setRecordingAlwaysPreparedMode(false)
@@ -338,12 +351,17 @@ import WebRTC
     ) {
         switch speechActivityEvent {
         case .started:
+            NSLog("[Callingx | AudioDeviceModule] speechActivityStarted")
             subject.send(.speechActivityStarted)
         case .ended:
+            NSLog("[Callingx | AudioDeviceModule] speechActivityEnded")
             subject.send(.speechActivityEnded)
         @unknown default:
             break
         }
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(audioDeviceModule, didReceiveSpeechActivityEvent: speechActivityEvent)
     }
 
     /// Stores the created engine reference and emits an event so observers can
@@ -354,6 +372,10 @@ import WebRTC
     ) -> Int {
         self.engine = engine
         subject.send(.didCreateAudioEngine(engine))
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(audioDeviceModule, didCreateEngine: engine)
+        
         return Constant.successResult
     }
 
@@ -374,6 +396,15 @@ import WebRTC
         )
         isPlayingSubject.send(isPlayoutEnabled)
         isRecordingSubject.send(isRecordingEnabled)
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(
+            audioDeviceModule,
+            willEnableEngine: engine,
+            isPlayoutEnabled: isPlayoutEnabled,
+            isRecordingEnabled: isRecordingEnabled
+        )
+        
         return Constant.successResult
     }
 
@@ -395,6 +426,14 @@ import WebRTC
         isPlayingSubject.send(isPlayoutEnabled)
         isRecordingSubject.send(isRecordingEnabled)
 
+        // Forward to observer
+        delegateObserver.audioDeviceModule(
+            audioDeviceModule,
+            willStartEngine: engine,
+            isPlayoutEnabled: isPlayoutEnabled,
+            isRecordingEnabled: isRecordingEnabled
+        )
+
         return Constant.successResult
     }
 
@@ -415,6 +454,15 @@ import WebRTC
         )
         isPlayingSubject.send(isPlayoutEnabled)
         isRecordingSubject.send(isRecordingEnabled)
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(
+            audioDeviceModule,
+            didStopEngine: engine,
+            isPlayoutEnabled: isPlayoutEnabled,
+            isRecordingEnabled: isRecordingEnabled
+        )
+        
         return Constant.successResult
     }
 
@@ -435,6 +483,15 @@ import WebRTC
         )
         isPlayingSubject.send(isPlayoutEnabled)
         isRecordingSubject.send(isRecordingEnabled)
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(
+            audioDeviceModule,
+            didDisableEngine: engine,
+            isPlayoutEnabled: isPlayoutEnabled,
+            isRecordingEnabled: isRecordingEnabled
+        )
+        
         return Constant.successResult
     }
 
@@ -446,6 +503,10 @@ import WebRTC
         self.engine = nil
         subject.send(.willReleaseAudioEngine(engine))
         audioLevelsAdapter.uninstall(on: 0)
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(audioDeviceModule, willReleaseEngine: engine)
+        
         return Constant.successResult
     }
 
@@ -473,6 +534,17 @@ import WebRTC
             bus: 0,
             bufferSize: 1024
         )
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(
+            audioDeviceModule,
+            engine: engine,
+            configureInputFromSource: source,
+            toDestination: destination,
+            format: format,
+            context: context
+        )
+        
         return Constant.successResult
     }
 
@@ -493,6 +565,17 @@ import WebRTC
                 format: format
             )
         )
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(
+            audioDeviceModule,
+            engine: engine,
+            configureOutputFromSource: source,
+            toDestination: destination,
+            format: format,
+            context: context
+        )
+        
         return Constant.successResult
     }
 
@@ -500,7 +583,8 @@ import WebRTC
     public func audioDeviceModuleDidUpdateDevices(
         _ audioDeviceModule: RTCAudioDeviceModule
     ) {
-        // No-op
+        // Forward to observer
+        delegateObserver.audioDeviceModuleDidUpdateDevices(audioDeviceModule)
     }
 
     /// Mirrors state changes coming from CallKit/WebRTC voice-processing
@@ -521,6 +605,9 @@ import WebRTC
         isVoiceProcessingBypassedSubject.send(state.voiceProcessingBypassed)
         isVoiceProcessingAGCEnabledSubject.send(state.voiceProcessingAGCEnabled)
         isStereoPlayoutEnabledSubject.send(state.stereoPlayoutEnabled)
+        
+        // Forward to observer
+        delegateObserver.audioDeviceModule(module, didUpdateAudioProcessingState: state)
     }
 
     /// Mirrors the subset of properties that can be encoded for debugging.
