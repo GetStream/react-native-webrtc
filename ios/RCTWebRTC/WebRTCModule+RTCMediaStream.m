@@ -519,9 +519,10 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(mediaStreamTrackClone : (nonnull NSString
             RTCAudioTrack *audioTrack = [self.peerConnectionFactory audioTrackWithTrackId:trackUUID];
             audioTrack.isEnabled = originalTrack.isEnabled;
             [self.localTracks setObject:audioTrack forKey:trackUUID];
-            for (NSString* streamId in self.localStreams) {
+            for (NSString* streamId in [self.localStreams allKeys]) {
                 RTCMediaStream* stream = [self.localStreams objectForKey:streamId];
-                for (RTCAudioTrack* track in stream.audioTracks) {
+                if (stream == nil) continue;
+                for (RTCAudioTrack* track in [stream.audioTracks copy]) {
                     if ([trackID isEqualToString:track.trackId]) {
                         [stream addAudioTrack:audioTrack];
                     }
@@ -537,9 +538,10 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(mediaStreamTrackClone : (nonnull NSString
             [self addLocalVideoTrackDimensionDetection:videoTrack];
             
             [self.localTracks setObject:videoTrack forKey:trackUUID];
-            for (NSString* streamId in self.localStreams) {
+            for (NSString* streamId in [self.localStreams allKeys]) {
                 RTCMediaStream* stream = [self.localStreams objectForKey:streamId];
-                for (RTCVideoTrack* track in stream.videoTracks) {
+                if (stream == nil) continue;
+                for (RTCVideoTrack* track in [stream.videoTracks copy]) {
                     if ([trackID isEqualToString:track.trackId]) {
                         [stream addVideoTrack:videoTrack];
                     }
