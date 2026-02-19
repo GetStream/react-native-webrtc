@@ -21,7 +21,9 @@ import RTCAudioSession from './RTCAudioSession';
 import RTCErrorEvent from './RTCErrorEvent';
 import RTCIceCandidate from './RTCIceCandidate';
 import RTCPeerConnection from './RTCPeerConnection';
+import RTCRtpEncodingParameters, { type RTCRtpEncodingParametersInit } from './RTCRtpEncodingParameters';
 import RTCRtpReceiver from './RTCRtpReceiver';
+import RTCRtpSendParameters, { type RTCRtpSendParametersInit } from './RTCRtpSendParameters';
 import RTCRtpSender from './RTCRtpSender';
 import RTCRtpTransceiver from './RTCRtpTransceiver';
 import RTCSessionDescription from './RTCSessionDescription';
@@ -42,14 +44,18 @@ export {
     RTCSessionDescription,
     RTCView,
     ScreenCapturePickerView,
+    RTCRtpEncodingParameters,
     RTCRtpTransceiver,
     RTCRtpReceiver,
     RTCRtpSender,
+    RTCRtpSendParameters,
     RTCErrorEvent,
     RTCAudioSession,
     MediaStream,
     MediaStreamTrack,
     type MediaTrackSettings,
+    type RTCRtpEncodingParametersInit,
+    type RTCRtpSendParametersInit,
     mediaDevices,
     permissions,
     registerGlobals,
