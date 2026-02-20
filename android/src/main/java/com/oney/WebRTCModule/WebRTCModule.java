@@ -129,7 +129,46 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 .setUseHardwareAcousticEchoCanceler(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseHardwareNoiseSuppressor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseStereoOutput(true)
+                .setAudioBufferCallback((audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
+                    if (bytesRead > 0) {
+                        WebRTCModuleOptions.ScreenAudioBytesProvider provider =
+                                WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
+                        if (provider != null) {
+                            java.nio.ByteBuffer screenBuffer = provider.getScreenAudioBytes(bytesRead);
+                            if (screenBuffer != null && screenBuffer.remaining() > 0) {
+                                mixScreenAudioIntoBuffer(audioBuffer, screenBuffer, bytesRead);
+                            }
+                        }
+                    }
+                    return captureTimeNs;
+                })
                 .createAudioDeviceModule();
+    }
+
+    /**
+     * Mixes screen audio into the microphone buffer using PCM additive mixing with clamping.
+     */
+    private static void mixScreenAudioIntoBuffer(java.nio.ByteBuffer micBuffer,
+                                                  java.nio.ByteBuffer screenBuffer,
+                                                  int bytesRead) {
+        micBuffer.position(0);
+        screenBuffer.position(0);
+
+        micBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        screenBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+
+        java.nio.ShortBuffer micShorts = micBuffer.asShortBuffer();
+        java.nio.ShortBuffer screenShorts = screenBuffer.asShortBuffer();
+
+        int samplesToMix = Math.min(bytesRead / 2,
+                Math.min(micShorts.remaining(), screenShorts.remaining()));
+
+        for (int i = 0; i < samplesToMix; i++) {
+            int sum = micShorts.get(i) + screenShorts.get(i);
+            if (sum > Short.MAX_VALUE) sum = Short.MAX_VALUE;
+            if (sum < Short.MIN_VALUE) sum = Short.MIN_VALUE;
+            micShorts.put(i, (short) sum);
+        }
     }
 
     @NonNull
@@ -140,6 +179,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     public AudioDeviceModule getAudioDeviceModule() {
         return mAudioDeviceModule;
+    }
+
+    public GetUserMediaImpl getUserMediaImpl() {
+        return getUserMediaImpl;
     }
 
     public PeerConnectionObserver getPeerConnectionObserver(int id) {
