@@ -8,10 +8,21 @@
 
 @implementation InAppScreenCapturer {
     BOOL _capturing;
+    BOOL _shouldResumeOnForeground;
 }
 
 - (instancetype)initWithDelegate:(__weak id<RTCVideoCapturerDelegate>)delegate {
     self = [super initWithDelegate:delegate];
+    if (self) {
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(appDidBecomeActive)
+                                                     name:UIApplicationDidBecomeActiveNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(appWillResignActive)
+                                                     name:UIApplicationWillResignActiveNotification
+                                                   object:nil];
+    }
     return self;
 }
 
@@ -21,6 +32,10 @@
     }
     _capturing = YES;
 
+    [self startRPScreenRecorder];
+}
+
+- (void)startRPScreenRecorder {
     RPScreenRecorder *recorder = [RPScreenRecorder sharedRecorder];
     recorder.microphoneEnabled = NO; // WebRTC handles mic input
 
@@ -76,7 +91,10 @@
         return;
     }
     _capturing = NO;
+    _shouldResumeOnForeground = NO;
     self.audioBufferHandler = nil;
+
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 
     [[RPScreenRecorder sharedRecorder] stopCaptureWithHandler:^(NSError * _Nullable error) {
         if (error) {
@@ -85,7 +103,30 @@
     }];
 }
 
+#pragma mark - App Lifecycle
+
+- (void)appWillResignActive {
+    if (_capturing) {
+        _shouldResumeOnForeground = YES;
+        // Stop the RPScreenRecorder session — iOS suspends it in background anyway
+        [[RPScreenRecorder sharedRecorder] stopCaptureWithHandler:^(NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"[InAppScreenCapturer] background stop error: %@", error.localizedDescription);
+            }
+        }];
+    }
+}
+
+- (void)appDidBecomeActive {
+    if (_shouldResumeOnForeground && _capturing) {
+        _shouldResumeOnForeground = NO;
+        NSLog(@"[InAppScreenCapturer] Resuming capture after returning to foreground");
+        [self startRPScreenRecorder];
+    }
+}
+
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     if (_capturing) {
         _capturing = NO;
         self.audioBufferHandler = nil;
