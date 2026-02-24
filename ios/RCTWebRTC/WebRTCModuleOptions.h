@@ -13,6 +13,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign) RTCLoggingSeverity loggingSeverity;
 @property(nonatomic, assign) BOOL enableMultitaskingCameraAccess;
 
+/// When YES, the next getDisplayMedia() call will use RPScreenRecorder (in-app capture)
+/// instead of the broadcast extension. Auto-cleared after use.
+@property(nonatomic, assign) BOOL useInAppScreenCapture;
+
+/// When YES, in-app screen capture will route .audioApp buffers to the audio mixer.
+@property(nonatomic, assign) BOOL includeScreenShareAudio;
+
 #pragma mark - This class is a singleton
 
 + (instancetype _Nonnull)sharedInstance;
