@@ -14,14 +14,14 @@
 - (instancetype)initWithDelegate:(__weak id<RTCVideoCapturerDelegate>)delegate {
     self = [super initWithDelegate:delegate];
     if (self) {
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(appDidBecomeActive)
-                                                     name:UIApplicationDidBecomeActiveNotification
-                                                   object:nil];
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(appWillResignActive)
-                                                     name:UIApplicationWillResignActiveNotification
-                                                   object:nil];
+        // [[NSNotificationCenter defaultCenter] addObserver:self
+        //                                          selector:@selector(appDidBecomeActive)
+        //                                              name:UIApplicationDidBecomeActiveNotification
+        //                                            object:nil];
+        // [[NSNotificationCenter defaultCenter] addObserver:self
+        //                                          selector:@selector(appWillResignActive)
+        //                                              name:UIApplicationWillResignActiveNotification
+        //                                            object:nil];
     }
     return self;
 }

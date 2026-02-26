@@ -1,5 +1,12 @@
 #import "WebRTCModuleOptions.h"
 
+// Import Swift-generated header for ScreenShareAudioMixer
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
+
 @implementation WebRTCModuleOptions
 
 #pragma mark - This class is a singleton

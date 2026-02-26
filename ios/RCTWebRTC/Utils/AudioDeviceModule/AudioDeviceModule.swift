@@ -179,6 +179,17 @@ import WebRTC
     /// Strong reference to the current engine so we can introspect it if needed.
     @objc public var engine: AVAudioEngine?
 
+    /// Delegate that receives synchronous input graph configuration callbacks.
+    /// Used by `ScreenShareAudioMixer` to modify the engine graph during mixing.
+    @objc public weak var audioGraphDelegate: AudioGraphConfigurationDelegate?
+
+    /// Cached input context from the last `configureInputFromSource` callback.
+    /// These allow `startMixing` to configure the graph immediately when the
+    /// engine is already running, without waiting for the next callback.
+    @objc public private(set) weak var lastInputSource: AVAudioNode?
+    @objc public private(set) weak var lastInputDestination: AVAudioNode?
+    @objc public private(set) var lastInputFormat: AVAudioFormat?
+
     /// Secondary observer that receives forwarded delegate callbacks.
     /// This allows the AudioDeviceModuleObserver to receive events and forward them to JS.
     private let delegateObserver: RTCAudioDeviceModuleDelegate
@@ -266,6 +277,15 @@ import WebRTC
         _ = source.setRecordingAlwaysPreparedMode(false)
         source.prefersStereoPlayout = isPreferred
         source.isVoiceProcessingBypassed = isPreferred
+    }
+
+    /// Sets voice processing bypass on the underlying audio device module.
+    /// When bypassed, echo cancellation / AGC / noise suppression are disabled,
+    /// which prevents the system from treating screen share audio as echo.
+    /// - Parameter isBypassed: `true` to bypass voice processing, `false` to restore.
+    @objc public func setVoiceProcessingBypassed(_ isBypassed: Bool) {
+        source.isVoiceProcessingBypassed = isBypassed
+        NSLog("[AudioDeviceModule] setVoiceProcessingBypassed: %@", isBypassed ? "YES" : "NO")
     }
 
     /// Starts or stops speaker playout on the ADM, retrying transient failures.
@@ -445,6 +465,8 @@ import WebRTC
         isPlayoutEnabled: Bool,
         isRecordingEnabled: Bool
     ) -> Int {
+        audioGraphDelegate?.onDidStopEngine?(engine)
+
         subject.send(
             .didStopAudioEngine(
                 engine,
@@ -474,6 +496,8 @@ import WebRTC
         isPlayoutEnabled: Bool,
         isRecordingEnabled: Bool
     ) -> Int {
+        audioGraphDelegate?.onDidDisableEngine?(engine)
+
         subject.send(
             .didDisableAudioEngine(
                 engine,
@@ -500,7 +524,14 @@ import WebRTC
         _ audioDeviceModule: RTCAudioDeviceModule,
         willReleaseEngine engine: AVAudioEngine
     ) -> Int {
+        // Notify delegate BEFORE clearing cached context so it can
+        // tear down its graph while references are still valid.
+        audioGraphDelegate?.onWillReleaseEngine?(engine)
+
         self.engine = nil
+        lastInputSource = nil
+        lastInputDestination = nil
+        lastInputFormat = nil
         subject.send(.willReleaseAudioEngine(engine))
         audioLevelsAdapter.uninstall(on: 0)
         
@@ -520,6 +551,11 @@ import WebRTC
         format: AVAudioFormat,
         context: [AnyHashable: Any]
     ) -> Int {
+        // Cache the input context for on-demand use by ScreenShareAudioMixer.
+        lastInputSource = source
+        lastInputDestination = destination
+        lastInputFormat = format
+
         subject.send(
             .configureInputFromSource(
                 engine,
@@ -528,6 +564,16 @@ import WebRTC
                 format: format
             )
         )
+
+        // Notify the audio graph delegate synchronously — this must happen
+        // BEFORE the audio levels tap so the mixer can modify the graph first.
+        audioGraphDelegate?.onConfigureInputFromSource(
+            engine,
+            source: source,
+            destination: destination,
+            format: format
+        )
+
         audioLevelsAdapter.installInputTap(
             on: destination,
             format: format,

@@ -91,6 +91,13 @@
                 NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring audioDevice.");
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
+
+            // Store reference to the default APM if it is one, so we can set
+            // capturePostProcessingDelegate later for screen share audio mixing.
+            if ([audioProcessingModule isKindOfClass:[RTCDefaultAudioProcessingModule class]]) {
+                options.defaultAudioProcessingModule = (RTCDefaultAudioProcessingModule *)audioProcessingModule;
+            }
+
             _peerConnectionFactory =
                 [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
@@ -103,12 +110,24 @@
                                                                                decoderFactory:decoderFactory
                                                                                   audioDevice:audioDevice];
         } else {
+            // No custom APM provided — create a mixer eagerly and set it as
+            // capturePostProcessingDelegate at APM creation time (not runtime).
+            // The mixer stays dormant (isMixing=false) until startMixing is called.
+            ScreenShareAudioMixer *mixer = [[ScreenShareAudioMixer alloc] init];
+            options.screenShareAudioMixer = mixer;
+
+            RTCDefaultAudioProcessingModule *defaultAPM = [[RTCDefaultAudioProcessingModule alloc]
+                initWithConfig:nil
+                capturePostProcessingDelegate:mixer
+                renderPreProcessingDelegate:nil];
+            options.defaultAudioProcessingModule = defaultAPM;
+
             _peerConnectionFactory =
                 [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
                                                                  encoderFactory:encoderFactory
                                                                  decoderFactory:decoderFactory
-                                                          audioProcessingModule:nil];
+                                                          audioProcessingModule:defaultAPM];
         }
         
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];

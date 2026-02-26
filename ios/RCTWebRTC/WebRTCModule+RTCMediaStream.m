@@ -18,6 +18,13 @@
 #import "ScreenCaptureController.h"
 #import "ScreenCapturer.h"
 #import "TrackCapturerEventsEmitter.h"
+
+// Import Swift-generated header for ScreenShareAudioMixer
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
 #import "VideoCaptureController.h"
 
 @implementation WebRTCModule (RTCMediaStream)
@@ -213,6 +220,23 @@
 
         InAppScreenCapturer *capturer = [[InAppScreenCapturer alloc] initWithDelegate:videoSource];
         InAppScreenCaptureController *controller = [[InAppScreenCaptureController alloc] initWithCapturer:capturer];
+
+        // Store weak reference for audio mixing wiring
+        options.activeInAppScreenCapturer = capturer;
+
+        // If audio mixing is requested, set up the audio buffer handler.
+        // The handler forwards .audioApp CMSampleBuffers to the mixer's enqueue method.
+        // The mixer may not exist yet (created by startScreenShareAudioMixing),
+        // so we check at each callback invocation.
+        if (options.includeScreenShareAudio) {
+            capturer.audioBufferHandler = ^(CMSampleBufferRef sampleBuffer) {
+                ScreenShareAudioMixer *mixer = [WebRTCModuleOptions sharedInstance].screenShareAudioMixer;
+                if (mixer) {
+                    [mixer enqueue:sampleBuffer];
+                }
+            };
+        }
+
         captureController = controller;
     } else {
         // Existing broadcast extension path

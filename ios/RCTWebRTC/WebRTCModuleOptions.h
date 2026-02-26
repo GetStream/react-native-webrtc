@@ -1,7 +1,13 @@
 #import <Foundation/Foundation.h>
 #import <WebRTC/WebRTC.h>
 
+@class InAppScreenCapturer;
+@class RTCDefaultAudioProcessingModule;
+
 NS_ASSUME_NONNULL_BEGIN
+
+// Forward declare the Swift class — the actual import happens in the .m file.
+@class ScreenShareAudioMixer;
 
 @interface WebRTCModuleOptions : NSObject
 
@@ -9,6 +15,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, strong, nullable) id<RTCVideoEncoderFactory> videoEncoderFactory;
 @property(nonatomic, strong, nullable) id<RTCAudioDevice> audioDevice;
 @property(nonatomic, strong, nullable) id<RTCAudioProcessingModule> audioProcessingModule;
+
+/// Retained reference to the default audio processing module.
+/// Used to dynamically set capturePostProcessingDelegate for screen share audio mixing.
+@property(nonatomic, strong, nullable) RTCDefaultAudioProcessingModule *defaultAudioProcessingModule;
+
 @property(nonatomic, strong, nullable) NSDictionary *fieldTrials;
 @property(nonatomic, assign) RTCLoggingSeverity loggingSeverity;
 @property(nonatomic, assign) BOOL enableMultitaskingCameraAccess;
@@ -19,6 +30,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// When YES, in-app screen capture will route .audioApp buffers to the audio mixer.
 @property(nonatomic, assign) BOOL includeScreenShareAudio;
+
+/// The active screen share audio mixer instance. Created by
+/// `startScreenShareAudioMixing` and cleared by `stopScreenShareAudioMixing`.
+@property(nonatomic, strong, nullable) ScreenShareAudioMixer *screenShareAudioMixer;
+
+/// Weak reference to the current in-app screen capturer, set during
+/// `createScreenCaptureVideoTrack` when in-app mode is used.
+@property(nonatomic, weak, nullable) InAppScreenCapturer *activeInAppScreenCapturer;
 
 #pragma mark - This class is a singleton
 
