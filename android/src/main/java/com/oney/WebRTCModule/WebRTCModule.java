@@ -146,7 +146,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     /**
-     * Mixes screen audio into the microphone buffer using PCM additive mixing with clamping.
+     * Mixes screen audio into the microphone buffer using PCM 16-bit additive mixing
+     * with clamping. Handles different buffer sizes safely: each buffer is read only
+     * within its own bounds. When one buffer is shorter, the other's samples pass
+     * through unmodified (mic samples stay as-is, or screen-only samples are written).
      */
     private static void mixScreenAudioIntoBuffer(java.nio.ByteBuffer micBuffer,
                                                   java.nio.ByteBuffer screenBuffer,
@@ -160,11 +163,22 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         java.nio.ShortBuffer micShorts = micBuffer.asShortBuffer();
         java.nio.ShortBuffer screenShorts = screenBuffer.asShortBuffer();
 
-        int samplesToMix = Math.min(bytesRead / 2,
-                Math.min(micShorts.remaining(), screenShorts.remaining()));
+        int micSamples = Math.min(bytesRead / 2, micShorts.remaining());
+        int screenSamples = screenShorts.remaining();
+        int totalSamples = Math.max(micSamples, screenSamples);
 
-        for (int i = 0; i < samplesToMix; i++) {
-            int sum = micShorts.get(i) + screenShorts.get(i);
+        for (int i = 0; i < totalSamples; i++) {
+            int sum;
+            if (i >= micSamples) {
+                // Screen-only: mic buffer is shorter — write screen sample directly
+                sum = screenShorts.get(i);
+            } else if (i >= screenSamples) {
+                // Mic-only: screen buffer is shorter — keep mic sample as-is
+                break;
+            } else {
+                // Both buffers have data — add samples
+                sum = micShorts.get(i) + screenShorts.get(i);
+            }
             if (sum > Short.MAX_VALUE) sum = Short.MAX_VALUE;
             if (sum < Short.MIN_VALUE) sum = Short.MIN_VALUE;
             micShorts.put(i, (short) sum);
