@@ -34,17 +34,14 @@ final class ScreenShareAudioConverter {
     /// non-interleaved layouts.
     func pcmBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
-            NSLog("[ScreenShareAudio] Converter: no format description in CMSampleBuffer")
             return nil
         }
 
         guard let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else {
-            NSLog("[ScreenShareAudio] Converter: no ASBD in format description")
             return nil
         }
 
         guard let avFormat = AVAudioFormat(streamDescription: asbdPtr) else {
-            NSLog("[ScreenShareAudio] Converter: failed to create AVAudioFormat from ASBD")
             return nil
         }
 
@@ -94,7 +91,6 @@ final class ScreenShareAudioConverter {
             let bytesPerFrame = Int(avFormat.streamDescription.pointee.mBytesPerFrame)
             memcpy(int16Data[0], dataPointer, min(totalLength, Int(frameCount) * bytesPerFrame))
         } else {
-            NSLog("[ScreenShareAudio] Converter: unsupported PCM format (no float or int16 channel data)")
             return nil
         }
 
@@ -129,7 +125,6 @@ final class ScreenShareAudioConverter {
         }
 
         guard let converter = converter else {
-            NSLog("[ScreenShareAudio] Converter: AVAudioConverter creation failed")
             return nil
         }
 
@@ -154,8 +149,7 @@ final class ScreenShareAudioConverter {
             }
         }
 
-        if let error = error {
-            NSLog("[ScreenShareAudio] Converter: conversion error: \(error.localizedDescription)")
+        if error != nil {
             return nil
         }
 
