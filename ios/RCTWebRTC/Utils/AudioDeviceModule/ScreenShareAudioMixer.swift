@@ -7,20 +7,24 @@ import CoreMedia
 import WebRTC
 
 /// Mixes screen share audio (from RPScreenRecorder `.audioApp` buffers) into the
-/// WebRTC microphone capture stream using `RTCAudioCustomProcessingDelegate`.
+/// WebRTC microphone capture stream by inserting an `AVAudioPlayerNode` and
+/// `AVAudioMixerNode` into the engine's input graph.
 ///
-/// Screen audio samples are written into a ring buffer. WebRTC's audio processing
-/// pipeline calls `audioProcessingProcess(_:)` on its own thread; this method reads
-/// from the ring buffer and additively mixes the screen audio into the mic samples.
-@objc public final class ScreenShareAudioMixer: NSObject, RTCAudioCustomProcessingDelegate {
+/// Graph topology (wired in `onConfigureInputFromSource`):
+/// ```
+/// source (mic VP) --> mixerNode --> destination (WebRTC capture)
+///                        ^
+/// playerNode -----------/
+/// ```
+///
+/// The mixer stays dormant (no nodes attached) until `startMixing` is called.
+/// Screen audio buffers are scheduled on the player node via `enqueue(_:)`.
+@objc public final class ScreenShareAudioMixer: NSObject, AudioGraphConfigurationDelegate {
 
-    // MARK: - Ring buffer
+    // MARK: - Audio graph nodes
 
-    private var ringBuffer: [Float]
-    private var writeIndex: Int = 0
-    private var readIndex: Int = 0
-    private let ringCapacity: Int
-    private let lock = NSLock()
+    private let playerNode = AVAudioPlayerNode()
+    private let mixerNode = AVAudioMixerNode()
 
     // MARK: - Audio conversion
 
@@ -29,142 +33,113 @@ import WebRTC
     // MARK: - State
 
     private var isMixing = false
-    private var processingFormat: AVAudioFormat?
+
+    /// The engine reference from the last `onConfigureInputFromSource` call.
+    /// Used to detach nodes on cleanup.
+    private weak var currentEngine: AVAudioEngine?
+
+    /// Format of the input graph path, used for converting screen audio.
+    private var graphFormat: AVAudioFormat?
+
+    /// Whether our nodes are currently attached to the engine.
+    private var nodesAttached = false
 
     // MARK: - Diagnostics
 
-    private var processCallCount: Int = 0
-    private var processWithDataCount: Int = 0
     private var enqueueCallCount: Int = 0
-    private var enqueueWrittenCount: Int = 0
+    private var enqueueScheduledCount: Int = 0
     private var enqueueSilenceCount: Int = 0
     private var enqueuePcmFailCount: Int = 0
     private var enqueueConvFailCount: Int = 0
-    private var enqueueNoFormatCount: Int = 0
     private var formatLogged = false
 
     // MARK: - Init
 
     @objc public override init() {
-        // 1 second at 48 kHz — enough to absorb jitter between
-        // RPScreenRecorder delivery and WebRTC processing cadence.
-        ringCapacity = 48000
-        ringBuffer = [Float](repeating: 0, count: ringCapacity)
         super.init()
-        NSLog("[ScreenShareAudio] Mixer instance created")
+        NSLog("[ScreenShareAudio] Mixer instance created (graph approach)")
     }
 
     deinit {
         NSLog("[ScreenShareAudio] Mixer instance deallocated!")
     }
 
-    // MARK: - RTCAudioCustomProcessingDelegate
+    // MARK: - AudioGraphConfigurationDelegate
 
-    public func audioProcessingInitialize(sampleRate sampleRateHz: Int, channels: Int) {
-        lock.lock()
-        defer { lock.unlock() }
-        processingFormat = AVAudioFormat(
-            standardFormatWithSampleRate: Double(sampleRateHz),
-            channels: AVAudioChannelCount(channels)
-        )
-        writeIndex = 0
-        readIndex = 0
-        NSLog("[ScreenShareAudio] audioProcessingInitialize: %dHz, %dch", sampleRateHz, channels)
-    }
+    public func onConfigureInputFromSource(
+        _ engine: AVAudioEngine,
+        source: AVAudioNode?,
+        destination: AVAudioNode,
+        format: AVAudioFormat
+    ) {
+        currentEngine = engine
+        graphFormat = format
 
-    public func audioProcessingProcess(audioBuffer: RTCAudioBuffer) {
-        guard isMixing else { return }
-        lock.lock()
-        defer { lock.unlock() }
-
-        processCallCount += 1
-
-        let frames = audioBuffer.frames
-        let channelBuffer = audioBuffer.rawBuffer(forChannel: 0)
-
-        // Mix ring buffer data into the mic capture if available
-        let available = writeIndex - readIndex
-        if available > 0 {
-            let framesToRead = min(frames, available)
-            for i in 0..<framesToRead {
-                channelBuffer[i] += ringBuffer[(readIndex + i) % ringCapacity]
-            }
-            readIndex += framesToRead
-            processWithDataCount += 1
+        guard isMixing else {
+            NSLog("[ScreenShareAudio] onConfigureInputFromSource: not mixing, skipping graph modification")
+            return
         }
 
-        // Periodic stats (every ~1s at 10ms cadence = 100 calls)
-        if processCallCount % 100 == 0 {
-            // Sample ring buffer amplitude at current read position
-            var ringPeak: Float = 0
-            let ringAvail = writeIndex - readIndex
-            let samplesToCheck = min(ringAvail, 480)
-            for i in 0..<samplesToCheck {
-                ringPeak = max(ringPeak, abs(ringBuffer[(readIndex + i) % ringCapacity]))
-            }
-            NSLog("[ScreenShareAudio] PROCESS stats: calls=%d, withData=%d, ringAvail=%d, ringPeak=%g, enqueued=%d, written=%d",
-                  processCallCount, processWithDataCount, ringAvail, ringPeak,
-                  enqueueCallCount, enqueueWrittenCount)
-        }
+        attachAndWireNodes(engine: engine, source: source, destination: destination, format: format)
     }
 
-    public func audioProcessingRelease() {
-        lock.lock()
-        defer { lock.unlock() }
-        writeIndex = 0
-        readIndex = 0
-        processingFormat = nil
-        NSLog("[ScreenShareAudio] audioProcessingRelease")
+    public func onDidStopEngine(_ engine: AVAudioEngine) {
+        detachNodes(from: engine)
+    }
+
+    public func onDidDisableEngine(_ engine: AVAudioEngine) {
+        detachNodes(from: engine)
+    }
+
+    public func onWillReleaseEngine(_ engine: AVAudioEngine) {
+        detachNodes(from: engine)
+        currentEngine = nil
+        graphFormat = nil
     }
 
     // MARK: - Public API
 
-    /// Enable audio buffer processing. Call when screen share with audio starts.
+    /// Enable audio mixing. Call when screen share with audio starts.
+    ///
+    /// If the engine is already running (i.e., `onConfigureInputFromSource` has
+    /// already fired), this triggers an ADM reconfiguration so the graph gets
+    /// rewired with our nodes.
     @objc public func startMixing() {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard !isMixing else {
             NSLog("[ScreenShareAudio] startMixing called but already mixing")
             return
         }
         isMixing = true
-        writeIndex = 0
-        readIndex = 0
 
         // Reset diagnostic counters
-        processCallCount = 0
-        processWithDataCount = 0
         enqueueCallCount = 0
-        enqueueWrittenCount = 0
+        enqueueScheduledCount = 0
         enqueueSilenceCount = 0
         enqueuePcmFailCount = 0
         enqueueConvFailCount = 0
-        enqueueNoFormatCount = 0
         formatLogged = false
 
-        NSLog("[ScreenShareAudio] startMixing (processingFormat=%@)",
-              processingFormat != nil ? "\(processingFormat!.sampleRate)Hz/\(processingFormat!.channelCount)ch" : "nil")
+        NSLog("[ScreenShareAudio] startMixing (graphFormat=%@)",
+              graphFormat != nil ? "\(graphFormat!.sampleRate)Hz/\(graphFormat!.channelCount)ch" : "nil")
     }
 
-    /// Stop processing audio buffers.
+    /// Stop audio mixing and detach nodes from the engine.
     @objc public func stopMixing() {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard isMixing else {
             NSLog("[ScreenShareAudio] stopMixing called but not mixing")
             return
         }
         isMixing = false
 
-        NSLog("[ScreenShareAudio] stopMixing — FINAL STATS: process=%d (withData=%d), enqueue=%d (written=%d, silence=%d, pcmFail=%d, convFail=%d, noFmt=%d)",
-              processCallCount, processWithDataCount,
-              enqueueCallCount, enqueueWrittenCount, enqueueSilenceCount,
-              enqueuePcmFailCount, enqueueConvFailCount, enqueueNoFormatCount)
+        NSLog("[ScreenShareAudio] stopMixing — FINAL STATS: enqueue=%d (scheduled=%d, silence=%d, pcmFail=%d, convFail=%d)",
+              enqueueCallCount, enqueueScheduledCount, enqueueSilenceCount,
+              enqueuePcmFailCount, enqueueConvFailCount)
 
-        writeIndex = 0
-        readIndex = 0
+        // Stop player and detach nodes
+        playerNode.stop()
+        if let engine = currentEngine {
+            detachNodes(from: engine)
+        }
         audioConverter.reset()
     }
 
@@ -172,11 +147,7 @@ import WebRTC
     @objc public func enqueue(_ sampleBuffer: CMSampleBuffer) {
         guard isMixing else { return }
 
-        guard let targetFormat = processingFormat else {
-            enqueueNoFormatCount += 1
-            if enqueueNoFormatCount <= 5 {
-                NSLog("[ScreenShareAudio] ENQUEUE: no processingFormat yet (count=%d)", enqueueNoFormatCount)
-            }
+        guard let targetFormat = graphFormat else {
             return
         }
 
@@ -191,34 +162,13 @@ import WebRTC
             return
         }
 
-        // One-time format logging with full ASBD details
+        // One-time format logging
         if !formatLogged {
             formatLogged = true
             let srcFmt = pcm.format
-            let asbd = srcFmt.streamDescription.pointee
-            NSLog("[ScreenShareAudio] ENQUEUE FORMAT: screen=%gHz/%dch/fmt%d/interleaved=%d → target=%gHz/%dch",
-                  srcFmt.sampleRate, srcFmt.channelCount, srcFmt.commonFormat.rawValue,
-                  srcFmt.isInterleaved ? 1 : 0,
+            NSLog("[ScreenShareAudio] ENQUEUE FORMAT: screen=%gHz/%dch → target=%gHz/%dch",
+                  srcFmt.sampleRate, srcFmt.channelCount,
                   targetFormat.sampleRate, targetFormat.channelCount)
-            NSLog("[ScreenShareAudio] ASBD: bitsPerCh=%d, bytesPerFrame=%d, bytesPerPacket=%d, formatFlags=0x%X, formatID=%d",
-                  asbd.mBitsPerChannel, asbd.mBytesPerFrame, asbd.mBytesPerPacket,
-                  asbd.mFormatFlags, asbd.mFormatID)
-            // Check raw PCM amplitude
-            var rawPeak: Float = 0
-            if let floatCh = pcm.floatChannelData {
-                for i in 0..<min(Int(pcm.frameLength), 1024) {
-                    rawPeak = max(rawPeak, abs(floatCh[0][i]))
-                }
-                NSLog("[ScreenShareAudio] RAW PCM peak (float ch0): %g", rawPeak)
-            } else if let int16Ch = pcm.int16ChannelData {
-                var int16Peak: Int16 = 0
-                for i in 0..<min(Int(pcm.frameLength), 1024) {
-                    int16Peak = max(int16Peak, abs(int16Ch[0][i]))
-                }
-                NSLog("[ScreenShareAudio] RAW PCM peak (int16 ch0): %d", int16Peak)
-            } else {
-                NSLog("[ScreenShareAudio] RAW PCM: NO float or int16 channel data! commonFormat=%d", srcFmt.commonFormat.rawValue)
-            }
         }
 
         // 2. Silence detection
@@ -227,7 +177,7 @@ import WebRTC
             return
         }
 
-        // 3. Convert to processing format (e.g. 48 kHz / 1 ch / float32)
+        // 3. Convert to graph format (e.g. 48 kHz / 1 ch / float32)
         let buffer: AVAudioPCMBuffer
         if pcm.format.sampleRate != targetFormat.sampleRate
             || pcm.format.channelCount != targetFormat.channelCount
@@ -245,41 +195,60 @@ import WebRTC
             buffer = pcm
         }
 
-        // 4. Write to ring buffer
-        guard let floatData = buffer.floatChannelData else {
-            NSLog("[ScreenShareAudio] ENQUEUE: no floatChannelData after conversion!")
+        // 4. Schedule on player node
+        guard nodesAttached else {
             return
         }
-        let frames = Int(buffer.frameLength)
 
-        // Periodic amplitude check on converted buffer (every 50th write)
-        if enqueueWrittenCount % 50 == 0 {
-            var peak: Float = 0
-            for i in 0..<min(frames, 1024) {
-                peak = max(peak, abs(floatData[0][i]))
-            }
-            NSLog("[ScreenShareAudio] CONVERTED peak amplitude: %g (frames=%d)", peak, frames)
+        playerNode.scheduleBuffer(buffer)
+        enqueueScheduledCount += 1
+
+        // Start playback if not already playing
+        if !playerNode.isPlaying {
+            playerNode.play()
         }
 
-        lock.lock()
-        defer { lock.unlock() }
-
-        // Handle overflow: if ring is too full, advance read index
-        let available = writeIndex - readIndex
-        if available + frames > ringCapacity {
-            readIndex = writeIndex + frames - ringCapacity
+        // Periodic stats (every ~50 buffers ≈ ~1s)
+        if enqueueScheduledCount % 50 == 0 {
+            NSLog("[ScreenShareAudio] ENQUEUE stats: calls=%d, scheduled=%d, silence=%d",
+                  enqueueCallCount, enqueueScheduledCount, enqueueSilenceCount)
         }
+    }
 
-        for i in 0..<frames {
-            ringBuffer[(writeIndex + i) % ringCapacity] = floatData[0][i]
-        }
-        writeIndex += frames
-        enqueueWrittenCount += 1
+    // MARK: - Private graph management
 
-        // Periodic enqueue stats (every 50 ≈ ~1s)
-        if enqueueWrittenCount % 50 == 0 {
-            NSLog("[ScreenShareAudio] ENQUEUE stats: calls=%d, written=%d, frames=%d, ringAvail=%d, silence=%d",
-                  enqueueCallCount, enqueueWrittenCount, frames, writeIndex - readIndex, enqueueSilenceCount)
+    private func attachAndWireNodes(
+        engine: AVAudioEngine,
+        source: AVAudioNode?,
+        destination: AVAudioNode,
+        format: AVAudioFormat
+    ) {
+        // Detach if previously attached (e.g., engine reconfiguration)
+        detachNodes(from: engine)
+
+        engine.attach(mixerNode)
+        engine.attach(playerNode)
+
+        // Wire: source → mixerNode → destination
+        if let source = source {
+            engine.connect(source, to: mixerNode, format: format)
         }
+        engine.connect(playerNode, to: mixerNode, format: format)
+        engine.connect(mixerNode, to: destination, format: format)
+
+        nodesAttached = true
+        NSLog("[ScreenShareAudio] Graph wired: source(%@) → mixer → destination, format=%gHz/%dch",
+              source != nil ? "VP" : "nil", format.sampleRate, format.channelCount)
+    }
+
+    private func detachNodes(from engine: AVAudioEngine) {
+        guard nodesAttached else { return }
+
+        // Detaching automatically disconnects all connections
+        engine.detach(playerNode)
+        engine.detach(mixerNode)
+        nodesAttached = false
+
+        NSLog("[ScreenShareAudio] Nodes detached from engine")
     }
 }

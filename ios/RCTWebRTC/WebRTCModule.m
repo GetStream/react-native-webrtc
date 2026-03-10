@@ -86,14 +86,19 @@
         RCTLogInfo(@"Using video encoder factory: %@", NSStringFromClass([encoderFactory class]));
         RCTLogInfo(@"Using video decoder factory: %@", NSStringFromClass([decoderFactory class]));
 
+        // Always create the screen share audio mixer eagerly.
+        // It stays dormant (isMixing=false) until startMixing is called.
+        // It will be wired as audioGraphDelegate on the ADM after factory creation.
+        ScreenShareAudioMixer *mixer = [[ScreenShareAudioMixer alloc] init];
+        options.screenShareAudioMixer = mixer;
+
         if (audioProcessingModule != nil) {
             if (audioDevice != nil) {
                 NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring audioDevice.");
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
 
-            // Store reference to the default APM if it is one, so we can set
-            // capturePostProcessingDelegate later for screen share audio mixing.
+            // Store reference to the default APM if it is one.
             if ([audioProcessingModule isKindOfClass:[RTCDefaultAudioProcessingModule class]]) {
                 options.defaultAudioProcessingModule = (RTCDefaultAudioProcessingModule *)audioProcessingModule;
             }
@@ -110,16 +115,9 @@
                                                                                decoderFactory:decoderFactory
                                                                                   audioDevice:audioDevice];
         } else {
-            // No custom APM provided — create a mixer eagerly and set it as
-            // capturePostProcessingDelegate at APM creation time (not runtime).
-            // The mixer stays dormant (isMixing=false) until startMixing is called.
-            ScreenShareAudioMixer *mixer = [[ScreenShareAudioMixer alloc] init];
-            options.screenShareAudioMixer = mixer;
-
-            RTCDefaultAudioProcessingModule *defaultAPM = [[RTCDefaultAudioProcessingModule alloc]
-                initWithConfig:nil
-                capturePostProcessingDelegate:mixer
-                renderPreProcessingDelegate:nil];
+            // No custom APM provided — create a default one (no capturePostProcessingDelegate needed;
+            // screen share audio mixing uses the AVAudioEngine graph approach via audioGraphDelegate).
+            RTCDefaultAudioProcessingModule *defaultAPM = [[RTCDefaultAudioProcessingModule alloc] init];
             options.defaultAudioProcessingModule = defaultAPM;
 
             _peerConnectionFactory =
@@ -129,10 +127,14 @@
                                                                  decoderFactory:decoderFactory
                                                           audioProcessingModule:defaultAPM];
         }
-        
+
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
         _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
                                                       delegateObserver:_rtcAudioDeviceModuleObserver];
+
+        // Wire the mixer as the audio graph delegate so it receives
+        // onConfigureInputFromSource callbacks to modify the engine graph.
+        _audioDeviceModule.audioGraphDelegate = mixer;
 
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
