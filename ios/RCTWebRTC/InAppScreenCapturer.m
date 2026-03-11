@@ -9,20 +9,11 @@
 @implementation InAppScreenCapturer {
     BOOL _capturing;
     BOOL _shouldResumeOnForeground;
+    BOOL _observingAppState;
 }
 
 - (instancetype)initWithDelegate:(__weak id<RTCVideoCapturerDelegate>)delegate {
     self = [super initWithDelegate:delegate];
-    if (self) {
-        // [[NSNotificationCenter defaultCenter] addObserver:self
-        //                                          selector:@selector(appDidBecomeActive)
-        //                                              name:UIApplicationDidBecomeActiveNotification
-        //                                            object:nil];
-        // [[NSNotificationCenter defaultCenter] addObserver:self
-        //                                          selector:@selector(appWillResignActive)
-        //                                              name:UIApplicationWillResignActiveNotification
-        //                                            object:nil];
-    }
     return self;
 }
 
@@ -62,10 +53,20 @@
                 break;
         }
     } completionHandler:^(NSError * _Nullable error) {
+        __strong __typeof__(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
         if (error) {
             NSLog(@"[InAppScreenCapturer] startCapture failed: %@", error.localizedDescription);
-            [weakSelf.eventsDelegate capturerDidEnd:weakSelf];
+            strongSelf->_capturing = NO;
+            [strongSelf.eventsDelegate capturerDidEnd:strongSelf];
+            return;
         }
+
+        // Capture started successfully — register for app lifecycle events.
+        // Done here (not in startCapture) so the RPScreenRecorder permission
+        // dialog doesn't trigger appWillResignActive before capture begins.
+        [strongSelf registerAppStateObservers];
     }];
 }
 
@@ -94,7 +95,7 @@
     _shouldResumeOnForeground = NO;
     self.audioBufferHandler = nil;
 
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self unregisterAppStateObservers];
 
     [[RPScreenRecorder sharedRecorder] stopCaptureWithHandler:^(NSError * _Nullable error) {
         if (error) {
@@ -104,6 +105,34 @@
 }
 
 #pragma mark - App Lifecycle
+
+- (void)registerAppStateObservers {
+    if (_observingAppState) return;
+    _observingAppState = YES;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(appDidBecomeActive)
+                                                     name:UIApplicationDidBecomeActiveNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(appWillResignActive)
+                                                     name:UIApplicationWillResignActiveNotification
+                                                   object:nil];
+    });
+}
+
+- (void)unregisterAppStateObservers {
+    if (!_observingAppState) return;
+    _observingAppState = NO;
+
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationDidBecomeActiveNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationWillResignActiveNotification
+                                                  object:nil];
+}
 
 - (void)appWillResignActive {
     if (_capturing) {
@@ -120,13 +149,12 @@
 - (void)appDidBecomeActive {
     if (_shouldResumeOnForeground && _capturing) {
         _shouldResumeOnForeground = NO;
-        NSLog(@"[InAppScreenCapturer] Resuming capture after returning to foreground");
         [self startRPScreenRecorder];
     }
 }
 
 - (void)dealloc {
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self unregisterAppStateObservers];
     if (_capturing) {
         _capturing = NO;
         self.audioBufferHandler = nil;
