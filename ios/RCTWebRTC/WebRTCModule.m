@@ -98,11 +98,6 @@
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
 
-            // Store reference to the default APM if it is one.
-            if ([audioProcessingModule isKindOfClass:[RTCDefaultAudioProcessingModule class]]) {
-                options.defaultAudioProcessingModule = (RTCDefaultAudioProcessingModule *)audioProcessingModule;
-            }
-
             _peerConnectionFactory =
                 [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
@@ -115,17 +110,12 @@
                                                                                decoderFactory:decoderFactory
                                                                                   audioDevice:audioDevice];
         } else {
-            // No custom APM provided — create a default one (no capturePostProcessingDelegate needed;
-            // screen share audio mixing uses the AVAudioEngine graph approach via audioGraphDelegate).
-            RTCDefaultAudioProcessingModule *defaultAPM = [[RTCDefaultAudioProcessingModule alloc] init];
-            options.defaultAudioProcessingModule = defaultAPM;
-
             _peerConnectionFactory =
                 [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
                                                                  encoderFactory:encoderFactory
                                                                  decoderFactory:decoderFactory
-                                                          audioProcessingModule:defaultAPM];
+                                                          audioProcessingModule:nil];
         }
 
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];

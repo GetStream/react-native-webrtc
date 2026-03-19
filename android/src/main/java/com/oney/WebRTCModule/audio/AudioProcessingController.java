@@ -17,20 +17,13 @@ public class AudioProcessingController implements AudioProcessingFactoryProvider
     public ExternalAudioProcessingFactory externalAudioProcessingFactory;
 
     public AudioProcessingController() {
-        // ExternalAudioProcessingFactory creation is deferred to getFactory()
-        // because its constructor calls JNI native methods that require the
-        // WebRTC native library to be loaded first (via PeerConnectionFactory.initialize()).
-        // This allows AudioProcessingController to be safely instantiated in
-        // MainApplication.onCreate() before the native library is loaded.
+        this.externalAudioProcessingFactory = new ExternalAudioProcessingFactory();
+        this.externalAudioProcessingFactory.setCapturePostProcessing(capturePostProcessing);
+        this.externalAudioProcessingFactory.setRenderPreProcessing(renderPreProcessing);
     }
 
     @Override
     public AudioProcessingFactory getFactory() {
-        if (this.externalAudioProcessingFactory == null) {
-            this.externalAudioProcessingFactory = new ExternalAudioProcessingFactory();
-            this.externalAudioProcessingFactory.setCapturePostProcessing(capturePostProcessing);
-            this.externalAudioProcessingFactory.setRenderPreProcessing(renderPreProcessing);
-        }
         return this.externalAudioProcessingFactory;
     }
 }
