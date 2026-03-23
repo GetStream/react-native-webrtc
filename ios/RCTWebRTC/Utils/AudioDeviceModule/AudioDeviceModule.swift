@@ -285,7 +285,7 @@ import WebRTC
     /// - Parameter isBypassed: `true` to bypass voice processing, `false` to restore.
     @objc public func setVoiceProcessingBypassed(_ isBypassed: Bool) {
         source.isVoiceProcessingBypassed = isBypassed
-        NSLog("[AudioDeviceModule] setVoiceProcessingBypassed: %@", isBypassed ? "YES" : "NO")
+        isVoiceProcessingBypassedSubject.send(isBypassed)
     }
 
     /// Starts or stops speaker playout on the ADM, retrying transient failures.
