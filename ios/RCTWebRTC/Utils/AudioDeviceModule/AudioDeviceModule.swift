@@ -179,16 +179,10 @@ import WebRTC
     /// Strong reference to the current engine so we can introspect it if needed.
     @objc public var engine: AVAudioEngine?
 
-    /// Delegate that receives synchronous input graph configuration callbacks.
-    /// Used by `ScreenShareAudioMixer` to modify the engine graph during mixing.
-    @objc public var audioGraphDelegate: AudioGraphConfigurationDelegate?
-
-    /// Cached input context from the last `configureInputFromSource` callback.
-    /// These allow `startMixing` to configure the graph immediately when the
-    /// engine is already running, without waiting for the next callback.
-    @objc public private(set) weak var lastInputSource: AVAudioNode?
-    @objc public private(set) weak var lastInputDestination: AVAudioNode?
-    @objc public private(set) var lastInputFormat: AVAudioFormat?
+    /// Screen share audio mixer. Implements `RTCAudioCustomProcessingDelegate`
+    /// and is set as `capturePostProcessingDelegate` on the
+    /// `RTCDefaultAudioProcessingModule` when screen share audio mixing starts.
+    @objc public let screenShareAudioMixer = ScreenShareAudioMixer()
 
     /// Secondary observer that receives forwarded delegate callbacks.
     /// This allows the AudioDeviceModuleObserver to receive events and forward them to JS.
@@ -239,7 +233,6 @@ import WebRTC
             .eraseToAnyPublisher()
         super.init()
 
-        _ = source.setMuteMode(.inputMixer)
         audioLevelsAdapter.subject = audioLevelSubject
         source.observer = self
     }
@@ -465,8 +458,6 @@ import WebRTC
         isPlayoutEnabled: Bool,
         isRecordingEnabled: Bool
     ) -> Int {
-        audioGraphDelegate?.onDidStopEngine?(engine)
-
         subject.send(
             .didStopAudioEngine(
                 engine,
@@ -496,8 +487,6 @@ import WebRTC
         isPlayoutEnabled: Bool,
         isRecordingEnabled: Bool
     ) -> Int {
-        audioGraphDelegate?.onDidDisableEngine?(engine)
-
         subject.send(
             .didDisableAudioEngine(
                 engine,
@@ -524,14 +513,7 @@ import WebRTC
         _ audioDeviceModule: RTCAudioDeviceModule,
         willReleaseEngine engine: AVAudioEngine
     ) -> Int {
-        // Notify delegate BEFORE clearing cached context so it can
-        // tear down its graph while references are still valid.
-        audioGraphDelegate?.onWillReleaseEngine?(engine)
-
         self.engine = nil
-        lastInputSource = nil
-        lastInputDestination = nil
-        lastInputFormat = nil
         subject.send(.willReleaseAudioEngine(engine))
         audioLevelsAdapter.uninstall(on: 0)
         
@@ -551,11 +533,6 @@ import WebRTC
         format: AVAudioFormat,
         context: [AnyHashable: Any]
     ) -> Int {
-        // Cache the input context for on-demand use by ScreenShareAudioMixer.
-        lastInputSource = source
-        lastInputDestination = destination
-        lastInputFormat = format
-
         subject.send(
             .configureInputFromSource(
                 engine,
@@ -566,14 +543,6 @@ import WebRTC
         )
 
         // Notify the audio graph delegate synchronously — this must happen
-        // BEFORE the audio levels tap so the mixer can modify the graph first.
-        audioGraphDelegate?.onConfigureInputFromSource(
-            engine,
-            source: source,
-            destination: destination,
-            format: format
-        )
-
         audioLevelsAdapter.installInputTap(
             on: destination,
             format: format,
