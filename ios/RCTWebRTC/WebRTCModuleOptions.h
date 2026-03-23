@@ -4,9 +4,6 @@
 @class InAppScreenCapturer;
 NS_ASSUME_NONNULL_BEGIN
 
-// Forward declare the Swift class — the actual import happens in the .m file.
-@class ScreenShareAudioMixer;
-
 @interface WebRTCModuleOptions : NSObject
 
 @property(nonatomic, strong, nullable) id<RTCVideoDecoderFactory> videoDecoderFactory;
@@ -24,10 +21,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// When YES, in-app screen capture will route .audioApp buffers to the audio mixer.
 @property(nonatomic, assign) BOOL includeScreenShareAudio;
-
-/// The screen share audio mixer instance. Created eagerly during WebRTCModule
-/// init and retained for the lifetime of the module (never cleared).
-@property(nonatomic, strong, nullable) ScreenShareAudioMixer *screenShareAudioMixer;
 
 /// Weak reference to the current in-app screen capturer, set during
 /// `createScreenCaptureVideoTrack` when in-app mode is used.

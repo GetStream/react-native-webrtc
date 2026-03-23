@@ -181,7 +181,7 @@ import WebRTC
 
     /// Delegate that receives synchronous input graph configuration callbacks.
     /// Used by `ScreenShareAudioMixer` to modify the engine graph during mixing.
-    @objc public weak var audioGraphDelegate: AudioGraphConfigurationDelegate?
+    @objc public var audioGraphDelegate: AudioGraphConfigurationDelegate?
 
     /// Cached input context from the last `configureInputFromSource` callback.
     /// These allow `startMixing` to configure the graph immediately when the

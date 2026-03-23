@@ -86,12 +86,6 @@
         RCTLogInfo(@"Using video encoder factory: %@", NSStringFromClass([encoderFactory class]));
         RCTLogInfo(@"Using video decoder factory: %@", NSStringFromClass([decoderFactory class]));
 
-        // Always create the screen share audio mixer eagerly.
-        // It stays dormant (isMixing=false) until startMixing is called.
-        // It will be wired as audioGraphDelegate on the ADM after factory creation.
-        ScreenShareAudioMixer *mixer = [[ScreenShareAudioMixer alloc] init];
-        options.screenShareAudioMixer = mixer;
-
         if (audioProcessingModule != nil) {
             if (audioDevice != nil) {
                 NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring audioDevice.");
@@ -121,10 +115,6 @@
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
         _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
                                                       delegateObserver:_rtcAudioDeviceModuleObserver];
-
-        // Wire the mixer as the audio graph delegate so it receives
-        // onConfigureInputFromSource callbacks to modify the engine graph.
-        _audioDeviceModule.audioGraphDelegate = mixer;
 
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
