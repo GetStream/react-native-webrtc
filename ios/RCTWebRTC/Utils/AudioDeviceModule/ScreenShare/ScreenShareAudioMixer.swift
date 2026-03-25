@@ -34,7 +34,6 @@ import WebRTC
     /// Processing format from `audioProcessingInitialize`.
     private var processingSampleRate: Double = 0
     private var processingChannels: Int = 0
-    /// Target format for conversion, built from processing parameters.
     private var targetFormat: AVAudioFormat?
 
     /// Scale factor: RTCAudioBuffer uses FloatS16 format (Float32 values in the

@@ -272,15 +272,6 @@ import WebRTC
         source.isVoiceProcessingBypassed = isPreferred
     }
 
-    /// Sets voice processing bypass on the underlying audio device module.
-    /// When bypassed, echo cancellation / AGC / noise suppression are disabled,
-    /// which prevents the system from treating screen share audio as echo.
-    /// - Parameter isBypassed: `true` to bypass voice processing, `false` to restore.
-    @objc public func setVoiceProcessingBypassed(_ isBypassed: Bool) {
-        source.isVoiceProcessingBypassed = isBypassed
-        isVoiceProcessingBypassedSubject.send(isBypassed)
-    }
-
     /// Starts or stops speaker playout on the ADM, retrying transient failures.
     /// - Parameter isActive: `true` to start playout, `false` to stop.
     /// - Throws: `AudioDeviceError` when WebRTC returns a non-zero status.
@@ -541,8 +532,6 @@ import WebRTC
                 format: format
             )
         )
-
-        // Notify the audio graph delegate synchronously — this must happen
         audioLevelsAdapter.installInputTap(
             on: destination,
             format: format,
