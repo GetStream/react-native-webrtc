@@ -108,9 +108,11 @@
 
 - (void)registerAppStateObservers {
     if (_observingAppState) return;
-    _observingAppState = YES;
 
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_observingAppState || !self->_capturing) return;
+        self->_observingAppState = YES;
+
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(appDidBecomeActive)
                                                      name:UIApplicationDidBecomeActiveNotification
