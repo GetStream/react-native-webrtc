@@ -86,11 +86,23 @@
         RCTLogInfo(@"Using video encoder factory: %@", NSStringFromClass([encoderFactory class]));
         RCTLogInfo(@"Using video decoder factory: %@", NSStringFromClass([decoderFactory class]));
 
+        // Always ensure an audio processing module exists so screen share
+        // audio mixing can use capturePostProcessingDelegate at runtime.
+        if (audioProcessingModule == nil && audioDevice == nil) {
+            audioProcessingModule = [[RTCDefaultAudioProcessingModule alloc]
+                initWithConfig:nil
+                capturePostProcessingDelegate:nil
+                renderPreProcessingDelegate:nil];
+            options.audioProcessingModule = audioProcessingModule;
+            RCTLogInfo(@"Created default audio processing module for screen share audio mixing");
+        }
+
         if (audioProcessingModule != nil) {
             if (audioDevice != nil) {
                 NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring audioDevice.");
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
+
             _peerConnectionFactory =
                 [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
                                                           bypassVoiceProcessing:NO
@@ -110,7 +122,7 @@
                                                                  decoderFactory:decoderFactory
                                                           audioProcessingModule:nil];
         }
-        
+
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
         _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
                                                       delegateObserver:_rtcAudioDeviceModuleObserver];

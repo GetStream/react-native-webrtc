@@ -13,9 +13,18 @@
 #import "WebRTCModule+VideoTrackAdapter.h"
 
 #import "ProcessorProvider.h"
+#import "InAppScreenCaptureController.h"
+#import "InAppScreenCapturer.h"
 #import "ScreenCaptureController.h"
 #import "ScreenCapturer.h"
 #import "TrackCapturerEventsEmitter.h"
+
+// Import Swift-generated header for ScreenShareAudioMixer
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
 #import "VideoCaptureController.h"
 
 @implementation WebRTCModule (RTCMediaStream)
@@ -202,14 +211,32 @@
     NSString *trackUUID = [[NSUUID UUID] UUIDString];
     RTCVideoTrack *videoTrack = [self.peerConnectionFactory videoTrackWithSource:videoSource trackId:trackUUID];
 
-    ScreenCapturer *screenCapturer = [[ScreenCapturer alloc] initWithDelegate:videoSource];
-    ScreenCaptureController *screenCaptureController =
-        [[ScreenCaptureController alloc] initWithCapturer:screenCapturer];
+    WebRTCModuleOptions *options = [WebRTCModuleOptions sharedInstance];
+    CaptureController *captureController;
+
+    if (options.useInAppScreenCapture) {
+        // Clear the flag so subsequent getDisplayMedia calls use broadcast by default
+        options.useInAppScreenCapture = NO;
+
+        InAppScreenCapturer *capturer = [[InAppScreenCapturer alloc] initWithDelegate:videoSource];
+        InAppScreenCaptureController *controller = [[InAppScreenCaptureController alloc] initWithCapturer:capturer];
+
+        // Store weak reference for audio mixing wiring
+        options.activeInAppScreenCapturer = capturer;
+
+        captureController = controller;
+    } else {
+        // Existing broadcast extension path
+        ScreenCapturer *screenCapturer = [[ScreenCapturer alloc] initWithDelegate:videoSource];
+        ScreenCaptureController *screenCaptureController =
+            [[ScreenCaptureController alloc] initWithCapturer:screenCapturer];
+        captureController = screenCaptureController;
+    }
 
     TrackCapturerEventsEmitter *emitter = [[TrackCapturerEventsEmitter alloc] initWith:trackUUID webRTCModule:self];
-    screenCaptureController.eventsDelegate = emitter;
-    videoTrack.captureController = screenCaptureController;
-    [screenCaptureController startCapture];
+    captureController.eventsDelegate = emitter;
+    videoTrack.captureController = captureController;
+    [captureController startCapture];
 
     // Add dimension detection for local video tracks immediately
     [self addLocalVideoTrackDimensionDetection:videoTrack];

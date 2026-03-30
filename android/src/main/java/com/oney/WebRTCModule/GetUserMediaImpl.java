@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
  * The implementation of {@code getUserMedia} extracted into a separate file in
  * order to reduce complexity and to (somewhat) separate concerns.
  */
-class GetUserMediaImpl {
+public class GetUserMediaImpl {
     /**
      * The {@link Log} tag with which {@code GetUserMediaImpl} is to log.
      */
@@ -61,6 +61,15 @@ class GetUserMediaImpl {
 
     private Promise displayMediaPromise;
     private Intent mediaProjectionPermissionResultData;
+
+    /**
+     * Returns the MediaProjection permission result data Intent.
+     * This Intent can be used to create a MediaProjection for audio capture
+     * via AudioPlaybackCaptureConfiguration.
+     */
+    public Intent getMediaProjectionPermissionResultData() {
+        return mediaProjectionPermissionResultData;
+    }
 
     private final ServiceConnection mediaProjectionServiceConnection = new ServiceConnection() {
         @Override
@@ -355,7 +364,9 @@ class GetUserMediaImpl {
         }
 
         // Cleanup
-        mediaProjectionPermissionResultData = null;
+        // Note: mediaProjectionPermissionResultData is intentionally NOT nulled here.
+        // It is retained so it can be reused to create a MediaProjection for
+        // screen share audio capture (AudioPlaybackCaptureConfiguration).
         displayMediaPromise = null;
     }
 
