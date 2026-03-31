@@ -131,6 +131,7 @@
         _localStreams = [NSMutableDictionary new];
         _localTracks = [NSMutableDictionary new];
 
+        // TODO: FrameCryption is not supported yet; dictionaries left empty.
         _frameCryptors = [NSMutableDictionary new];
         _keyProviders = [NSMutableDictionary new];
         _dataPacketCryptors = [NSMutableDictionary new];
