@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.media.projection.MediaProjectionManager;
+import android.media.projection.MediaProjectionConfig;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -18,6 +20,7 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
@@ -61,6 +64,8 @@ public class GetUserMediaImpl {
 
     private Promise displayMediaPromise;
     private Intent mediaProjectionPermissionResultData;
+    private boolean createConfigForDefaultDisplay = false;
+    private float resolutionScale = 1.0f;
 
     /**
      * Returns the MediaProjection permission result data Intent.
@@ -322,7 +327,41 @@ public class GetUserMediaImpl {
         }
     }
 
-    void getDisplayMedia(Promise promise) {
+    void initializeConstraints(ReadableMap constraints) {
+
+        // Handle the incoming params
+
+        ReadableMap androidConstraints = null;
+        if (constraints.hasKey("android") && constraints.getType("android") == ReadableType.Map) {
+            androidConstraints = constraints.getMap("android");
+        }
+
+        // Default values
+        boolean createConfigForDefaultDisplay = false;
+        float scale = 1.0f;
+
+        if (androidConstraints != null) {
+            // MediaProjectionConfig need API level 34
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                && androidConstraints.hasKey("createConfigForDefaultDisplay")
+                && androidConstraints.getType("createConfigForDefaultDisplay") == ReadableType.Boolean) {
+                createConfigForDefaultDisplay = androidConstraints.getBoolean("createConfigForDefaultDisplay");
+            }
+            if (androidConstraints.hasKey("resolutionScale")
+                && androidConstraints.getType("resolutionScale") == ReadableType.Number) {
+                scale = (float) androidConstraints.getDouble("resolutionScale");
+            }
+        }
+
+        this.createConfigForDefaultDisplay = createConfigForDefaultDisplay;
+        // Force the value in [0, 1]
+        this.resolutionScale = Math.max(0.0f, Math.min(1.0f, scale));
+
+        Log.d(TAG, "initializeConstraints: createConfigForDefaultDisplay=" + this.createConfigForDefaultDisplay
+            + " resolutionScale=" + this.resolutionScale);
+    }
+
+    void getDisplayMedia(final ReadableMap constraints, Promise promise) {
         if (this.displayMediaPromise != null) {
             promise.reject(new RuntimeException("Another operation is pending."));
             return;
@@ -334,6 +373,8 @@ public class GetUserMediaImpl {
             return;
         }
 
+        this.initializeConstraints(constraints);
+
         this.displayMediaPromise = promise;
 
         MediaProjectionManager mediaProjectionManager =
@@ -344,8 +385,17 @@ public class GetUserMediaImpl {
             UiThreadUtil.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    currentActivity.startActivityForResult(
+
+                  if (createConfigForDefaultDisplay == true) {
+                        //MediaProjectionConfig need API level 34
+                        //Return mediaProjection which restricts the user to capturing the default display
+                        currentActivity.startActivityForResult(
+                            mediaProjectionManager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()), PERMISSION_REQUEST_CODE);
+                    } else {
+                        //Return mediaProjection which allows the user to decide which region is captured
+                        currentActivity.startActivityForResult(
                             mediaProjectionManager.createScreenCaptureIntent(), PERMISSION_REQUEST_CODE);
+                    }
                 }
             });
 
@@ -442,7 +492,7 @@ public class GetUserMediaImpl {
         int width = displayMetrics.widthPixels;
         int height = displayMetrics.heightPixels;
         ScreenCaptureController screenCaptureController = new ScreenCaptureController(
-                reactContext.getCurrentActivity(), width, height, mediaProjectionPermissionResultData);
+                reactContext.getCurrentActivity(), width, height, mediaProjectionPermissionResultData, resolutionScale);
         return createVideoTrack(screenCaptureController);
     }
 
