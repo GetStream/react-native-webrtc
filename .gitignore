@@ -13,6 +13,7 @@ WebRTC.dSYMs
 examples/GumTestApp/package-lock.json
 examples/GumTestApp_macOS/package-lock.json
 **/.xcode.env.local
+**/PLAN.md
 *.jar
 *.tgz
 *.zip

@@ -51,6 +51,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     final Map<String, MediaStream> localStreams;
 
     private final GetUserMediaImpl getUserMediaImpl;
+    private SpeechActivityDetector speechActivityDetector;
 
     public WebRTCModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -124,12 +125,32 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     private JavaAudioDeviceModule createAudioDeviceModule(ReactApplicationContext reactContext) {
+        speechActivityDetector = new SpeechActivityDetector(new SpeechActivityDetector.Listener() {
+            @Override
+            public void onSpeechStarted() {
+                WritableMap params = Arguments.createMap();
+                params.putString("event", "started");
+                sendEvent("audioDeviceModuleSpeechActivity", params);
+            }
+
+            @Override
+            public void onSpeechEnded() {
+                WritableMap params = Arguments.createMap();
+                params.putString("event", "ended");
+                sendEvent("audioDeviceModuleSpeechActivity", params);
+            }
+        });
+
         return JavaAudioDeviceModule
                 .builder(reactContext)
                 .setUseHardwareAcousticEchoCanceler(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseHardwareNoiseSuppressor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseStereoOutput(true)
                 .setAudioBufferCallback((audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
+                    // 1. Speech activity detection on raw mic data, BEFORE any mutation.
+                    speechActivityDetector.processBuffer(audioBuffer, bytesRead);
+
+                    // 2. Existing screen-audio mixing — mutates audioBuffer in place.
                     if (bytesRead > 0) {
                         WebRTCModuleOptions.ScreenAudioBytesProvider provider =
                                 WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
@@ -141,6 +162,17 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                         }
                     }
                     return captureTimeNs;
+                })
+                .setAudioRecordStateCallback(new JavaAudioDeviceModule.AudioRecordStateCallback() {
+                    @Override
+                    public void onWebRtcAudioRecordStart() {
+                        speechActivityDetector.reset();
+                    }
+
+                    @Override
+                    public void onWebRtcAudioRecordStop() {
+                        speechActivityDetector.onRecordStop();
+                    }
                 })
                 .createAudioDeviceModule();
     }

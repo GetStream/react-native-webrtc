@@ -28,7 +28,8 @@ export type AudioDeviceModuleEventData =
 
 /**
  * Event emitter for RTCAudioDeviceModule delegate callbacks.
- * iOS/macOS only.
+ * Speech activity events are supported on iOS, macOS, and Android.
+ * Engine/audio-processing-state events remain iOS/macOS only.
  */
 class AudioDeviceModuleEventEmitter {
     private eventEmitter: NativeEventEmitter | null = null;
@@ -39,17 +40,18 @@ class AudioDeviceModuleEventEmitter {
             return;
         }
 
-        if (Platform.OS !== 'android' && WebRTCModule) {
+        if (WebRTCModule) {
             this.eventEmitter = new NativeEventEmitter(WebRTCModule);
         }
     }
 
     /**
-     * Subscribe to speech activity events (started/ended)
+     * Subscribe to speech activity events (started/ended).
+     * Supported on iOS, macOS, and Android.
      */
     addSpeechActivityListener(listener: (data: SpeechActivityEventData) => void) {
         if (!this.eventEmitter) {
-            throw new Error('AudioDeviceModuleEvents is only available on iOS/macOS');
+            throw new Error('AudioDeviceModuleEvents: native module not available');
         }
 
         return this.eventEmitter.addListener('audioDeviceModuleSpeechActivity', listener);
