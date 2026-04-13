@@ -9,22 +9,6 @@ export enum AudioEngineMuteMode {
   InputMixer = 2,
 }
 
-export interface AudioEngineAvailability {
-  isInputAvailable: boolean;
-  isOutputAvailable: boolean;
-}
-
-export const AudioEngineAvailability = {
-    default: {
-        isInputAvailable: true,
-        isOutputAvailable: true,
-    },
-    none: {
-        isInputAvailable: false,
-        isOutputAvailable: false,
-    },
-} as const;
-
 /**
  * Audio Device Module API for controlling audio devices and settings.
  * iOS/macOS only - will throw on Android.
@@ -305,25 +289,7 @@ export class AudioDeviceModule {
         return WebRTCModule.audioDeviceModuleSetRecordingAlwaysPreparedMode(enabled);
     }
 
-    /**
-     * Get the current engine availability (input/output availability)
-     */
-    static getEngineAvailability(): AudioEngineAvailability {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleGetEngineAvailability();
-    }
-
-    /**
-     * Set the engine availability (input/output availability)
-     */
-    static async setEngineAvailability(availability: AudioEngineAvailability): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetEngineAvailability(availability);
-    }
+    // TODO: getEngineAvailability / setEngineAvailability are not supported by the
+    // Stream WebRTC SDK (no RTCAudioEngineAvailability type / setEngineAvailability:
+    // method). Re-add if/when the native API lands.
 }

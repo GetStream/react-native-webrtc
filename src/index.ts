@@ -8,7 +8,7 @@ if (WebRTCModule === null) {
     }`);
 }
 
-import { AudioDeviceModule, AudioEngineMuteMode, AudioEngineAvailability } from './AudioDeviceModule';
+import { AudioDeviceModule, AudioEngineMuteMode } from './AudioDeviceModule';
 import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
@@ -55,7 +55,6 @@ export {
     registerGlobals,
     AudioDeviceModule,
     AudioEngineMuteMode,
-    AudioEngineAvailability,
     audioDeviceModuleEvents,
 };
 

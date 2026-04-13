@@ -3,7 +3,6 @@
 #import <React/RCTBridge.h>
 #import <React/RCTBridgeModule.h>
 
-#import "AudioDeviceModuleObserver.h"
 #import "WebRTCModule.h"
 
 // The underlying `RTCAudioDeviceModule` is owned by the `RTCPeerConnectionFactory`.
@@ -208,30 +207,10 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetRecordingAlwaysPreparedMode
     }
 }
 
-RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleGetEngineAvailability) {
-    RTCAudioEngineAvailability availability = RAW_ADM.engineAvailability;
-    return @{
-        @"isInputAvailable" : @(availability.isInputAvailable),
-        @"isOutputAvailable" : @(availability.isOutputAvailable)
-    };
-}
-
-RCT_EXPORT_METHOD(audioDeviceModuleSetEngineAvailability
-                  : (NSDictionary *)availabilityDict resolver
-                  : (RCTPromiseResolveBlock)resolve rejecter
-                  : (RCTPromiseRejectBlock)reject) {
-    RTCAudioEngineAvailability availability;
-    availability.isInputAvailable = [availabilityDict[@"isInputAvailable"] boolValue];
-    availability.isOutputAvailable = [availabilityDict[@"isOutputAvailable"] boolValue];
-    NSInteger result = [RAW_ADM setEngineAvailability:availability];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"engine_availability_error",
-               [NSString stringWithFormat:@"Failed to set engine availability: %ld", (long)result],
-               nil);
-    }
-}
+// TODO: `getEngineAvailability` / `setEngineAvailability` were dropped because the
+// Stream WebRTC SDK does not expose `RTCAudioEngineAvailability` / `-setEngineAvailability:`.
+// The closest equivalent is `RTCAudioEngineState` via `engineState`, but the
+// semantics differ and the JS API isn't consumed anywhere yet.
 
 // TODO: Observer delegate "resolve" methods were skipped because our current
 // `AudioDeviceModuleObserver` does not expose async JS-driven resolution hooks;
