@@ -80,9 +80,14 @@ class SpeechActivityDetector {
             return;
         }
 
+        // Normalize int16 samples to [-1.0, 1.0] BEFORE squaring so the resulting
+        // dB value is dBFS (decibels relative to full scale). Without this, dB is
+        // computed against a 1-sample-unit reference and silence reads as ~+40,
+        // making the -45 dBFS threshold uncrossable from above (started would
+        // fire once and ended would never fire).
         double sumSquares = 0;
         for (int i = 0; i < numSamples; i++) {
-            double sample = shorts.get(i);
+            double sample = shorts.get(i) / (double) Short.MAX_VALUE;
             sumSquares += sample * sample;
         }
 
