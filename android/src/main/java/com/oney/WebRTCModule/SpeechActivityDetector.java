@@ -3,24 +3,36 @@ package com.oney.WebRTCModule;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.TreeMap;
 
 /**
- * Tells you when the user is talking, by measuring how loud the mic is.
+ * Tells you when the user is talking, by watching how loud the mic is over time.
  *
  * <p>How it works:
  * <ol>
  *   <li>Every ~10 ms the mic gives us a chunk of samples.</li>
- *   <li>Convert each chunk to one "loudness" number in decibels (dB):
- *       quiet room ≈ -60 dB, normal speech ≈ -30 to -20 dB.</li>
- *   <li>Keep the last 600 ms of dB values in a sliding window and average them.</li>
- *   <li>If the average crosses {@link #THRESHOLD_DB} (-45 dB) and stays on the
- *       other side for {@link #HYSTERESIS_MS} (200 ms), flip state and fire
- *       {@code onSpeechStarted} / {@code onSpeechEnded}. The 200 ms wait
- *       prevents flapping when the average bounces around the threshold.</li>
+ *   <li>Convert each chunk to one "loudness" number in dBFS (decibels relative
+ *       to full scale): quiet room ≈ -60 dB, normal speech ≈ -30 to -20 dB,
+ *       speaking close to the mic ≈ -15 to -10 dB.</li>
+ *   <li>Track two things only: <b>when we last saw a loud chunk</b> and
+ *       <b>when the current run of loud chunks started</b>.</li>
+ *   <li>Fire {@code onSpeechStarted} once we've had loud chunks for
+ *       {@link #START_CONFIRM_MS} in a row. Fire {@code onSpeechEnded} once
+ *       {@link #SILENCE_TIMEOUT_MS} has passed with no loud chunks. The
+ *       timeout is long enough to span natural between-word pauses.</li>
  * </ol>
+ *
+ * <p><b>Why this, not a rolling dB average?</b> Android's AGC (automatic gain
+ * control) ramps the mic gain back up the instant speech stops, amplifying
+ * room noise to -35 or -40 dB. A rolling average over that noise never drops
+ * below the threshold, so {@code onSpeechEnded} would never fire. Looking at
+ * "time since last loud peak" is immune to that — pauses between words are
+ * short, but a real stop is sustained.
+ *
+ * <p><b>Alignment with stream-video-android.</b> stream-video-android's
+ * {@code SoundInputProcessor} fires only an "edge-up" callback and relies on
+ * the app layer to infer "stopped". We need the {@code ended} edge to match
+ * the iOS contract, so we add the silence-timeout inference here using the
+ * same {@code -45 dBFS} threshold they use.
  *
  * <p><b>Not "real" voice recognition.</b> This only looks at energy/loudness,
  * not voice features. Loud non-voice sounds (typing, door slams, music) will
@@ -39,16 +51,20 @@ class SpeechActivityDetector {
         void onSpeechEnded();
     }
 
+    /** Above this dBFS level a chunk counts as "loud". Matches stream-video-android. */
     private static final double THRESHOLD_DB = -45.0;
-    private static final long WINDOW_MS = 600;
-    private static final long HYSTERESIS_MS = 200;
+    /** Require loud chunks for this long before firing started (rejects door slams). */
+    private static final long START_CONFIRM_MS = 150;
+    /** Fire ended after this long with no loud chunk (spans natural between-word pauses). */
+    private static final long SILENCE_TIMEOUT_MS = 900;
 
     private final Listener listener;
-    private final TreeMap<Long, Double> windowEntries = new TreeMap<>();
 
     private boolean isSpeaking = false;
-    /** Timestamp at which we first observed the candidate (opposite) state. */
-    private long candidateStateStartMs = -1;
+    /** Start of the current run of above-threshold chunks, or -1 if last chunk was quiet. */
+    private long firstLoudMs = -1;
+    /** Last time any chunk was above threshold, or -1 if never (or cleared on ended). */
+    private long lastLoudMs = -1;
 
     SpeechActivityDetector(Listener listener) {
         this.listener = listener;
@@ -82,9 +98,7 @@ class SpeechActivityDetector {
 
         // Normalize int16 samples to [-1.0, 1.0] BEFORE squaring so the resulting
         // dB value is dBFS (decibels relative to full scale). Without this, dB is
-        // computed against a 1-sample-unit reference and silence reads as ~+40,
-        // making the -45 dBFS threshold uncrossable from above (started would
-        // fire once and ended would never fire).
+        // computed against a 1-sample-unit reference and silence reads as ~+40.
         double sumSquares = 0;
         for (int i = 0; i < numSamples; i++) {
             double sample = shorts.get(i) / (double) Short.MAX_VALUE;
@@ -96,52 +110,34 @@ class SpeechActivityDetector {
 
         long now = System.currentTimeMillis();
 
-        // Add the new entry and prune stale ones.
-        windowEntries.put(now, db);
-        long cutoff = now - WINDOW_MS;
-        Iterator<Map.Entry<Long, Double>> it = windowEntries.entrySet().iterator();
-        while (it.hasNext()) {
-            if (it.next().getKey() < cutoff) {
-                it.remove();
-            } else {
-                break; // TreeMap is sorted — remaining entries are within the window.
+        if (db > THRESHOLD_DB) {
+            // Loud chunk. Open a start window if one isn't already open, and
+            // remember this as the most recent loud chunk for ended timing.
+            lastLoudMs = now;
+            if (firstLoudMs < 0) {
+                firstLoudMs = now;
             }
-        }
-
-        // Compute window average dB.
-        double sum = 0;
-        for (double value : windowEntries.values()) {
-            sum += value;
-        }
-        double avgDb = sum / windowEntries.size();
-
-        boolean aboveThreshold = avgDb > THRESHOLD_DB;
-
-        if (aboveThreshold == isSpeaking) {
-            // State matches — reset hysteresis counter.
-            candidateStateStartMs = -1;
+            if (!isSpeaking && now - firstLoudMs >= START_CONFIRM_MS) {
+                isSpeaking = true;
+                listener.onSpeechStarted();
+            }
         } else {
-            // State differs from current — track how long.
-            if (candidateStateStartMs < 0) {
-                candidateStateStartMs = now;
-            }
-            if (now - candidateStateStartMs >= HYSTERESIS_MS) {
-                isSpeaking = aboveThreshold;
-                candidateStateStartMs = -1;
-                if (isSpeaking) {
-                    listener.onSpeechStarted();
-                } else {
-                    listener.onSpeechEnded();
-                }
+            // Quiet chunk. Cancel any in-progress start confirmation. If we're
+            // already speaking, fire ended once the silence is long enough.
+            firstLoudMs = -1;
+            if (isSpeaking && lastLoudMs > 0 && now - lastLoudMs >= SILENCE_TIMEOUT_MS) {
+                isSpeaking = false;
+                lastLoudMs = -1;
+                listener.onSpeechEnded();
             }
         }
     }
 
-    /** Wipes the sliding window and state. Call on recorder start. No event fires. */
+    /** Wipes state. Call on recorder start. No event fires. */
     void reset() {
-        windowEntries.clear();
         isSpeaking = false;
-        candidateStateStartMs = -1;
+        firstLoudMs = -1;
+        lastLoudMs = -1;
     }
 
     /**
