@@ -253,6 +253,14 @@ export class AudioDeviceModule {
             throw new Error('AudioDeviceModule is only available on iOS/macOS');
         }
 
+        if (typeof level !== 'number' || isNaN(level)) {
+            throw new TypeError(`setDuckingLevel: expected a number, got ${typeof level}`);
+        }
+
+        if (!Number.isInteger(level) || level < 0 || level > 100) {
+            throw new RangeError(`setDuckingLevel: level must be an integer between 0 and 100, got ${level}`);
+        }
+
         return WebRTCModule.audioDeviceModuleSetDuckingLevel(level);
     }
 
