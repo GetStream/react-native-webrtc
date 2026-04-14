@@ -8,6 +8,7 @@ if (WebRTCModule === null) {
     }`);
 }
 
+import { AudioDeviceModule, AudioEngineMuteMode } from './AudioDeviceModule';
 import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
@@ -52,6 +53,8 @@ export {
     mediaDevices,
     permissions,
     registerGlobals,
+    AudioDeviceModule,
+    AudioEngineMuteMode,
     audioDeviceModuleEvents,
 };
 
@@ -83,4 +86,7 @@ function registerGlobals(): void {
     global.RTCRtpReceiver = RTCRtpReceiver;
     global.RTCRtpSender = RTCRtpSender;
     global.RTCErrorEvent = RTCErrorEvent;
+
+    // Ensure audioDeviceModuleEvents is initialized and event listeners are registered
+    audioDeviceModuleEvents.setupListeners();
 }

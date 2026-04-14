@@ -48,6 +48,8 @@ static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated = @"au
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStream *> *localStreams;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStreamTrack *> *localTracks;
 
+// TODO: FrameCryption is not supported by this SDK yet. These containers are
+// retained so the native factory initialization keeps working unchanged.
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptor *> *frameCryptors;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptorKeyProvider *> *keyProviders;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCDataPacketCryptor *> *dataPacketCryptors;
