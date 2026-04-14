@@ -356,7 +356,13 @@ public class GetUserMediaImpl {
 
     private void createScreenStream() {
         // Guards against onServiceConnected firing after invalidate() has disposed and nulled mFactory.
-        if (webRTCModule.mFactory == null) return;
+        if (webRTCModule.mFactory == null) {
+            if (displayMediaPromise != null) {
+                displayMediaPromise.reject("ERR_MODULE_DISPOSED", "WebRTCModule disposed during getDisplayMedia");
+                displayMediaPromise = null;
+            }
+            return;
+        }
         VideoTrack track = createScreenTrack();
 
         if (track == null) {
