@@ -10,6 +10,18 @@ export enum AudioEngineMuteMode {
 }
 
 /**
+ * Returns the native WebRTCModule after verifying the platform is iOS/macOS.
+ * Throws on Android where these audio device module APIs are not available.
+ */
+const getAudioDeviceModule = () => {
+    if (Platform.OS === 'android') {
+        throw new Error('AudioDeviceModule is only available on iOS/macOS');
+    }
+
+    return WebRTCModule;
+};
+
+/**
  * Audio Device Module API for controlling audio devices and settings.
  * iOS/macOS only - will throw on Android.
  */
@@ -18,240 +30,154 @@ export class AudioDeviceModule {
      * Start audio playback
      */
     static async startPlayout(): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleStartPlayout();
+        return getAudioDeviceModule().audioDeviceModuleStartPlayout();
     }
 
     /**
      * Stop audio playback
      */
     static async stopPlayout(): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleStopPlayout();
+        return getAudioDeviceModule().audioDeviceModuleStopPlayout();
     }
 
     /**
      * Start audio recording
      */
     static async startRecording(): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleStartRecording();
+        return getAudioDeviceModule().audioDeviceModuleStartRecording();
     }
 
     /**
      * Stop audio recording
      */
     static async stopRecording(): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleStopRecording();
+        return getAudioDeviceModule().audioDeviceModuleStopRecording();
     }
 
     /**
      * Initialize and start local audio recording (calls initAndStartRecording)
      */
     static async startLocalRecording(): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleStartLocalRecording();
+        return getAudioDeviceModule().audioDeviceModuleStartLocalRecording();
     }
 
     /**
      * Stop local audio recording
      */
     static async stopLocalRecording(): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleStopLocalRecording();
+        return getAudioDeviceModule().audioDeviceModuleStopLocalRecording();
     }
 
     /**
      * Mute or unmute the microphone
      */
     static async setMicrophoneMuted(muted: boolean): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetMicrophoneMuted(muted);
+        return getAudioDeviceModule().audioDeviceModuleSetMicrophoneMuted(muted);
     }
 
     /**
      * Check if microphone is currently muted
      */
     static isMicrophoneMuted(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsMicrophoneMuted();
+        return getAudioDeviceModule().audioDeviceModuleIsMicrophoneMuted();
     }
 
     /**
      * Enable or disable voice processing (requires engine restart)
      */
     static async setVoiceProcessingEnabled(enabled: boolean): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetVoiceProcessingEnabled(enabled);
+        return getAudioDeviceModule().audioDeviceModuleSetVoiceProcessingEnabled(enabled);
     }
 
     /**
      * Check if voice processing is enabled
      */
     static isVoiceProcessingEnabled(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsVoiceProcessingEnabled();
+        return getAudioDeviceModule().audioDeviceModuleIsVoiceProcessingEnabled();
     }
 
     /**
      * Temporarily bypass voice processing without restarting the engine
      */
     static setVoiceProcessingBypassed(bypassed: boolean): void {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        WebRTCModule.audioDeviceModuleSetVoiceProcessingBypassed(bypassed);
+        getAudioDeviceModule().audioDeviceModuleSetVoiceProcessingBypassed(bypassed);
     }
 
     /**
      * Check if voice processing is currently bypassed
      */
     static isVoiceProcessingBypassed(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsVoiceProcessingBypassed();
+        return getAudioDeviceModule().audioDeviceModuleIsVoiceProcessingBypassed();
     }
 
     /**
      * Enable or disable Automatic Gain Control (AGC)
      */
     static setVoiceProcessingAGCEnabled(enabled: boolean): void {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetVoiceProcessingAGCEnabled(enabled);
+        return getAudioDeviceModule().audioDeviceModuleSetVoiceProcessingAGCEnabled(enabled);
     }
 
     /**
      * Check if AGC is enabled
      */
     static isVoiceProcessingAGCEnabled(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsVoiceProcessingAGCEnabled();
+        return getAudioDeviceModule().audioDeviceModuleIsVoiceProcessingAGCEnabled();
     }
 
     /**
      * Check if audio is currently playing
      */
     static isPlaying(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsPlaying();
+        return getAudioDeviceModule().audioDeviceModuleIsPlaying();
     }
 
     /**
      * Check if audio is currently recording
      */
     static isRecording(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsRecording();
+        return getAudioDeviceModule().audioDeviceModuleIsRecording();
     }
 
     /**
      * Check if the audio engine is running
      */
     static isEngineRunning(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsEngineRunning();
+        return getAudioDeviceModule().audioDeviceModuleIsEngineRunning();
     }
 
     /**
      * Set the microphone mute mode
      */
     static async setMuteMode(mode: AudioEngineMuteMode): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetMuteMode(mode);
+        return getAudioDeviceModule().audioDeviceModuleSetMuteMode(mode);
     }
 
     /**
      * Get the current mute mode
      */
     static getMuteMode(): AudioEngineMuteMode {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleGetMuteMode();
+        return getAudioDeviceModule().audioDeviceModuleGetMuteMode();
     }
 
     /**
      * Enable or disable advanced audio ducking
      */
     static setAdvancedDuckingEnabled(enabled: boolean): void {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetAdvancedDuckingEnabled(enabled);
+        return getAudioDeviceModule().audioDeviceModuleSetAdvancedDuckingEnabled(enabled);
     }
 
     /**
      * Check if advanced ducking is enabled
      */
     static isAdvancedDuckingEnabled(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsAdvancedDuckingEnabled();
+        return getAudioDeviceModule().audioDeviceModuleIsAdvancedDuckingEnabled();
     }
 
     /**
      * Set the audio ducking level (0-100)
      */
     static setDuckingLevel(level: number): void {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
+        getAudioDeviceModule();
 
         if (typeof level !== 'number' || isNaN(level)) {
             throw new TypeError(`setDuckingLevel: expected a number, got ${typeof level}`);
@@ -268,33 +194,21 @@ export class AudioDeviceModule {
      * Get the current ducking level
      */
     static getDuckingLevel(): number {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleGetDuckingLevel();
+        return getAudioDeviceModule().audioDeviceModuleGetDuckingLevel();
     }
 
     /**
      * Check if recording always prepared mode is enabled
      */
     static isRecordingAlwaysPreparedMode(): boolean {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleIsRecordingAlwaysPreparedMode();
+        return getAudioDeviceModule().audioDeviceModuleIsRecordingAlwaysPreparedMode();
     }
 
     /**
      * Enable or disable recording always prepared mode
      */
     static async setRecordingAlwaysPreparedMode(enabled: boolean): Promise<void> {
-        if (Platform.OS === 'android') {
-            throw new Error('AudioDeviceModule is only available on iOS/macOS');
-        }
-
-        return WebRTCModule.audioDeviceModuleSetRecordingAlwaysPreparedMode(enabled);
+        return getAudioDeviceModule().audioDeviceModuleSetRecordingAlwaysPreparedMode(enabled);
     }
 
     // TODO: getEngineAvailability / setEngineAvailability are not supported by the

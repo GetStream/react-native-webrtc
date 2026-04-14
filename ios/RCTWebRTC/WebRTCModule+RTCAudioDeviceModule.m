@@ -13,74 +13,54 @@
 
 @implementation WebRTCModule (RTCAudioDeviceModule)
 
+- (void)handleADMResult:(NSInteger)result
+              operation:(NSString *)op
+                   code:(NSString *)code
+                resolve:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject {
+    if (result == 0) {
+        resolve(nil);
+    } else {
+        reject(code, [NSString stringWithFormat:@"Failed to %@: %ld", op, (long)result], nil);
+    }
+}
+
 #pragma mark - Recording & Playback Control
 
 RCT_EXPORT_METHOD(audioDeviceModuleStartPlayout
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM startPlayout];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"playout_error", [NSString stringWithFormat:@"Failed to start playout: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM startPlayout] operation:@"start playout" code:@"playout_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStopPlayout
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM stopPlayout];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"playout_error", [NSString stringWithFormat:@"Failed to stop playout: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM stopPlayout] operation:@"stop playout" code:@"playout_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStartRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM startRecording];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"recording_error", [NSString stringWithFormat:@"Failed to start recording: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM startRecording] operation:@"start recording" code:@"recording_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStopRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM stopRecording];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"recording_error", [NSString stringWithFormat:@"Failed to stop recording: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM stopRecording] operation:@"stop recording" code:@"recording_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStartLocalRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM initAndStartRecording];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(
-            @"recording_error", [NSString stringWithFormat:@"Failed to start local recording: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM initAndStartRecording] operation:@"start local recording" code:@"recording_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStopLocalRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM stopRecording];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(
-            @"recording_error", [NSString stringWithFormat:@"Failed to stop local recording: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM stopRecording] operation:@"stop local recording" code:@"recording_error" resolve:resolve reject:reject];
 }
 
 #pragma mark - Microphone Control
@@ -89,12 +69,7 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetMicrophoneMuted
                   : (BOOL)muted resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM setMicrophoneMuted:muted];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"mute_error", [NSString stringWithFormat:@"Failed to set microphone mute: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM setMicrophoneMuted:muted] operation:@"set microphone mute" code:@"mute_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleIsMicrophoneMuted) {
@@ -107,14 +82,7 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetVoiceProcessingEnabled
                   : (BOOL)enabled resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM setVoiceProcessingEnabled:enabled];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"voice_processing_error",
-               [NSString stringWithFormat:@"Failed to set voice processing: %ld", (long)result],
-               nil);
-    }
+    [self handleADMResult:[RAW_ADM setVoiceProcessingEnabled:enabled] operation:@"set voice processing" code:@"voice_processing_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleIsVoiceProcessingEnabled) {
@@ -159,12 +127,7 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetMuteMode
                   : (NSInteger)mode resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM setMuteMode:(RTCAudioEngineMuteMode)mode];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"mute_mode_error", [NSString stringWithFormat:@"Failed to set mute mode: %ld", (long)result], nil);
-    }
+    [self handleADMResult:[RAW_ADM setMuteMode:(RTCAudioEngineMuteMode)mode] operation:@"set mute mode" code:@"mute_mode_error" resolve:resolve reject:reject];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleGetMuteMode) {
@@ -197,14 +160,7 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetRecordingAlwaysPreparedMode
                   : (BOOL)enabled resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    NSInteger result = [RAW_ADM setRecordingAlwaysPreparedMode:enabled];
-    if (result == 0) {
-        resolve(nil);
-    } else {
-        reject(@"recording_always_prepared_mode_error",
-               [NSString stringWithFormat:@"Failed to set recording always prepared mode: %ld", (long)result],
-               nil);
-    }
+    [self handleADMResult:[RAW_ADM setRecordingAlwaysPreparedMode:enabled] operation:@"set recording always prepared mode" code:@"recording_always_prepared_mode_error" resolve:resolve reject:reject];
 }
 
 // TODO: `getEngineAvailability` / `setEngineAvailability` were dropped because the
