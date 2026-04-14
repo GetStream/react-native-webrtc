@@ -285,6 +285,17 @@ public class GetUserMediaImpl {
         }
     }
 
+    void disposeAllTracks() {
+        for (Map.Entry<String, TrackPrivate> entry : tracks.entrySet()) {
+            try {
+                entry.getValue().dispose();
+            } catch (Exception e) {
+                Log.w(TAG, "disposeAllTracks: error disposing " + entry.getKey(), e);
+            }
+        }
+        tracks.clear();
+    }
+
     void disposeTrack(String id) {
         TrackPrivate track = tracks.remove(id);
         if (track != null) {
@@ -344,6 +355,8 @@ public class GetUserMediaImpl {
     }
 
     private void createScreenStream() {
+        // Guards against onServiceConnected firing after invalidate() has disposed and nulled mFactory.
+        if (webRTCModule.mFactory == null) return;
         VideoTrack track = createScreenTrack();
 
         if (track == null) {

@@ -124,6 +124,46 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
     }
 
+    @Override
+    public void invalidate() {
+        Log.d(TAG, "invalidate()");
+
+        try {
+            ThreadUtils.submitToExecutor(() -> {
+                // 1. Dispose PeerConnections (dispose() calls close() internally)
+                for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
+                    try {
+                        mPeerConnectionObservers.valueAt(i).dispose();
+                    } catch (Exception e) {
+                        Log.w(TAG, "invalidate(): error disposing PC " + mPeerConnectionObservers.keyAt(i), e);
+                    }
+                }
+                mPeerConnectionObservers.clear();
+
+                // 2. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
+                getUserMediaImpl.disposeAllTracks();
+
+                // 3. Dispose local streams
+                for (MediaStream stream : localStreams.values()) {
+                    stream.dispose();
+                }
+                localStreams.clear();
+
+                // 4. Dispose factory (frees C++ factory + 3 threads)
+                if (mFactory != null) {
+                    mFactory.dispose();
+                    mFactory = null;
+                }
+
+                return null;
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            Log.e(TAG, "invalidate() error", e);
+        }
+
+        super.invalidate();
+    }
+
     private JavaAudioDeviceModule createAudioDeviceModule(ReactApplicationContext reactContext) {
         speechActivityDetector = new SpeechActivityDetector(new SpeechActivityDetector.Listener() {
             @Override
