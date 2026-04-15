@@ -633,9 +633,10 @@ public class GetUserMediaImpl {
                     }
                 }
 
-                // Clean up VideoTrackAdapter for video tracks
-                if (!isClone && videoTrackAdapter != null && track instanceof VideoTrack) {
+                // Clean up VideoTrackAdapter for video tracks (each TrackPrivate, incl. clones, has its own)
+                if (videoTrackAdapter != null && track instanceof VideoTrack) {
                     videoTrackAdapter.removeDimensionDetector((VideoTrack) track);
+                    videoTrackAdapter.dispose();
                 }
 
                 /*
