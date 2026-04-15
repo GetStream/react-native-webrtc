@@ -140,18 +140,21 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 }
                 mPeerConnectionObservers.clear();
 
-                // 2. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
-                getUserMediaImpl.disposeAllTracks();
-
-                // 3. Dispose local streams
+                // 2. Detach tracks, then dispose streams. Tracks themselves get disposed in step 3.
                 for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
                     try {
-                        entry.getValue().dispose();
+                        MediaStream stream = entry.getValue();
+                        for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                        for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                        stream.dispose();
                     } catch (Exception e) {
                         Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
                     }
                 }
                 localStreams.clear();
+
+                // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
+                getUserMediaImpl.disposeAllTracks();
 
                 // 4. Dispose factory (frees C++ factory + 3 threads)
                 if (mFactory != null) {
