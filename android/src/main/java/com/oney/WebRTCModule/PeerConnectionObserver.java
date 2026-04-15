@@ -99,6 +99,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         // by the PeerConnection instance (RtpReceivers, RtpSenders, etc.)
         peerConnection.dispose();
 
+        videoTrackAdapters.dispose();
+
         remoteStreamIds.clear();
         remoteStreams.clear();
         remoteTracks.clear();

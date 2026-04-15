@@ -285,6 +285,17 @@ public class GetUserMediaImpl {
         }
     }
 
+    void disposeAllTracks() {
+        for (Map.Entry<String, TrackPrivate> entry : tracks.entrySet()) {
+            try {
+                entry.getValue().dispose();
+            } catch (Exception e) {
+                Log.w(TAG, "disposeAllTracks: error disposing " + entry.getKey(), e);
+            }
+        }
+        tracks.clear();
+    }
+
     void disposeTrack(String id) {
         TrackPrivate track = tracks.remove(id);
         if (track != null) {
@@ -344,6 +355,14 @@ public class GetUserMediaImpl {
     }
 
     private void createScreenStream() {
+        // Guards against onServiceConnected firing after invalidate() has disposed and nulled mFactory.
+        if (webRTCModule.mFactory == null) {
+            if (displayMediaPromise != null) {
+                displayMediaPromise.reject("ERR_MODULE_DISPOSED", "WebRTCModule disposed during getDisplayMedia");
+                displayMediaPromise = null;
+            }
+            return;
+        }
         VideoTrack track = createScreenTrack();
 
         if (track == null) {
@@ -614,9 +633,10 @@ public class GetUserMediaImpl {
                     }
                 }
 
-                // Clean up VideoTrackAdapter for video tracks
-                if (!isClone && videoTrackAdapter != null && track instanceof VideoTrack) {
+                // Clean up VideoTrackAdapter for video tracks (each TrackPrivate, incl. clones, has its own)
+                if (videoTrackAdapter != null && track instanceof VideoTrack) {
                     videoTrackAdapter.removeDimensionDetector((VideoTrack) track);
+                    videoTrackAdapter.dispose();
                 }
 
                 /*

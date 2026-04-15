@@ -89,6 +89,10 @@ public class VideoTrackAdapter {
         Log.d(TAG, "Deleted dimension detector for " + trackId);
     }
 
+    void dispose() {
+        timer.cancel();
+    }
+
     /**
      * Implements 'mute'/'unmute' events for remote video tracks through
      * the {@link VideoSink} interface.

@@ -124,6 +124,53 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
     }
 
+    @Override
+    public void invalidate() {
+        Log.d(TAG, "invalidate()");
+
+        try {
+            ThreadUtils.submitToExecutor(() -> {
+                // 1. Dispose PeerConnections (dispose() calls close() internally)
+                for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
+                    try {
+                        mPeerConnectionObservers.valueAt(i).dispose();
+                    } catch (Exception e) {
+                        Log.w(TAG, "invalidate(): error disposing PC " + mPeerConnectionObservers.keyAt(i), e);
+                    }
+                }
+                mPeerConnectionObservers.clear();
+
+                // 2. Detach tracks, then dispose streams. Tracks themselves get disposed in step 3.
+                for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+                    try {
+                        MediaStream stream = entry.getValue();
+                        for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                        for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                        stream.dispose();
+                    } catch (Exception e) {
+                        Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
+                    }
+                }
+                localStreams.clear();
+
+                // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
+                getUserMediaImpl.disposeAllTracks();
+
+                // 4. Dispose factory (frees C++ factory + 3 threads)
+                if (mFactory != null) {
+                    mFactory.dispose();
+                    mFactory = null;
+                }
+
+                return null;
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            Log.e(TAG, "invalidate() error", e);
+        }
+
+        super.invalidate();
+    }
+
     private JavaAudioDeviceModule createAudioDeviceModule(ReactApplicationContext reactContext) {
         speechActivityDetector = new SpeechActivityDetector(new SpeechActivityDetector.Listener() {
             @Override
