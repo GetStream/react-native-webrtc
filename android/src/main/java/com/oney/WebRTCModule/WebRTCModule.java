@@ -144,8 +144,12 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 getUserMediaImpl.disposeAllTracks();
 
                 // 3. Dispose local streams
-                for (MediaStream stream : localStreams.values()) {
-                    stream.dispose();
+                for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+                    try {
+                        entry.getValue().dispose();
+                    } catch (Exception e) {
+                        Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
+                    }
                 }
                 localStreams.clear();
 
