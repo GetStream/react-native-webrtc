@@ -26,7 +26,6 @@ import java.util.Objects;
 import java.util.UUID;
 
 public class RTCCryptoManager {
-
     private static final String TAG = "RTCFrameCryptor";
     private final Map<String, FrameCryptor> frameCryptos = new HashMap<>();
     private final Map<String, FrameCryptorStateObserver> frameCryptoObservers = new HashMap<>();
@@ -80,7 +79,7 @@ public class RTCCryptoManager {
             sendEvent("frameCryptionStateChanged", event);
         }
     }
-//
+    //
 
     private FrameCryptorAlgorithm frameCryptorAlgorithmFromInt(int algorithm) {
         // StreamWebRTC M137 only supports AES_GCM
@@ -106,7 +105,7 @@ public class RTCCryptoManager {
         String rtpSenderId = params.getString("rtpSenderId");
         String rtpReceiverId = params.getString("rtpReceiverId");
 
-        if (type == null || !(type.equals("sender") || type.equals("receiver"))){
+        if (type == null || !(type.equals("sender") || type.equals("receiver"))) {
             Log.w(TAG, "frameCryptorFactoryCreateFrameCryptorFailed: type must be sender or receiver");
             return null;
         } else if (type.equals("sender")) {
@@ -231,9 +230,15 @@ public class RTCCryptoManager {
             uncryptedMagicBytes = Base64.decode(keyProviderOptions.getString("uncryptedMagicBytes"), Base64.DEFAULT);
         }
         int keyRingSize = (int) keyProviderOptions.getInt("keyRingSize");
-        boolean discardFrameWhenCryptorNotReady = (boolean) keyProviderOptions.getBoolean("discardFrameWhenCryptorNotReady");
-        FrameCryptorKeyProvider keyProvider = FrameCryptorFactory.createFrameCryptorKeyProvider(sharedKey, ratchetSalt, ratchetWindowSize,
-                uncryptedMagicBytes, failureTolerance, keyRingSize, discardFrameWhenCryptorNotReady);
+        boolean discardFrameWhenCryptorNotReady =
+                (boolean) keyProviderOptions.getBoolean("discardFrameWhenCryptorNotReady");
+        FrameCryptorKeyProvider keyProvider = FrameCryptorFactory.createFrameCryptorKeyProvider(sharedKey,
+                ratchetSalt,
+                ratchetWindowSize,
+                uncryptedMagicBytes,
+                failureTolerance,
+                keyRingSize,
+                discardFrameWhenCryptorNotReady);
         keyProviders.put(keyProviderId, keyProvider);
         return keyProviderId;
     }

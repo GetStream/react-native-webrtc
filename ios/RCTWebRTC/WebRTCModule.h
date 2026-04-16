@@ -31,7 +31,8 @@ static NSString *const kEventAudioDeviceModuleEngineDidStop = @"audioDeviceModul
 static NSString *const kEventAudioDeviceModuleEngineDidDisable = @"audioDeviceModuleEngineDidDisable";
 static NSString *const kEventAudioDeviceModuleEngineWillRelease = @"audioDeviceModuleEngineWillRelease";
 static NSString *const kEventAudioDeviceModuleDevicesUpdated = @"audioDeviceModuleDevicesUpdated";
-static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated = @"audioDeviceModuleAudioProcessingStateUpdated";
+static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
+    @"audioDeviceModuleAudioProcessingStateUpdated";
 
 @class AudioDeviceModule;
 

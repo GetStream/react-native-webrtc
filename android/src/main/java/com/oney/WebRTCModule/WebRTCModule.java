@@ -24,15 +24,15 @@ import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.oney.WebRTCModule.webrtcutils.SelectiveVideoDecoderFactory;
 
+import org.webrtc.*;
+import org.webrtc.audio.AudioDeviceModule;
+import org.webrtc.audio.JavaAudioDeviceModule;
+
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import org.webrtc.*;
-import org.webrtc.audio.AudioDeviceModule;
-import org.webrtc.audio.JavaAudioDeviceModule;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -77,9 +77,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
         String fieldTrials = options.fieldTrials;
 
-        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(reactContext)
+        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions
+                                                 .builder(reactContext)
 
-                .setFieldTrials(fieldTrials)
+                                                 .setFieldTrials(fieldTrials)
                                                  .setNativeLibraryLoader(new LibraryLoader())
                                                  .setInjectableLogger(injectableLogger, loggingSeverity)
                                                  .createInitializationOptions());
@@ -91,7 +92,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         if (encoderFactory == null || decoderFactory == null) {
             // Initialize EGL context required for HW acceleration.
             EglBase.Context eglContext = EglUtils.getRootEglBaseContext();
-            encoderFactory = new SimulcastAlignedVideoEncoderFactory(eglContext, true, true, ResolutionAdjustment.MULTIPLE_OF_16);
+            encoderFactory = new SimulcastAlignedVideoEncoderFactory(
+                    eglContext, true, true, ResolutionAdjustment.MULTIPLE_OF_16);
             decoderFactory = new SelectiveVideoDecoderFactory(eglContext, false, Arrays.asList("VP9", "AV1"));
         }
 
@@ -140,41 +142,43 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         Log.d(TAG, "invalidate()");
 
         try {
-            ThreadUtils.submitToExecutor(() -> {
-                // 1. Dispose PeerConnections (dispose() calls close() internally)
-                for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
-                    try {
-                        mPeerConnectionObservers.valueAt(i).dispose();
-                    } catch (Exception e) {
-                        Log.w(TAG, "invalidate(): error disposing PC " + mPeerConnectionObservers.keyAt(i), e);
-                    }
-                }
-                mPeerConnectionObservers.clear();
+            ThreadUtils
+                    .submitToExecutor(() -> {
+                        // 1. Dispose PeerConnections (dispose() calls close() internally)
+                        for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
+                            try {
+                                mPeerConnectionObservers.valueAt(i).dispose();
+                            } catch (Exception e) {
+                                Log.w(TAG, "invalidate(): error disposing PC " + mPeerConnectionObservers.keyAt(i), e);
+                            }
+                        }
+                        mPeerConnectionObservers.clear();
 
-                // 2. Detach tracks, then dispose streams. Tracks themselves get disposed in step 3.
-                for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
-                    try {
-                        MediaStream stream = entry.getValue();
-                        for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
-                        for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
-                        stream.dispose();
-                    } catch (Exception e) {
-                        Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
-                    }
-                }
-                localStreams.clear();
+                        // 2. Detach tracks, then dispose streams. Tracks themselves get disposed in step 3.
+                        for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+                            try {
+                                MediaStream stream = entry.getValue();
+                                for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                                for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                                stream.dispose();
+                            } catch (Exception e) {
+                                Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
+                            }
+                        }
+                        localStreams.clear();
 
-                // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
-                getUserMediaImpl.disposeAllTracks();
+                        // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
+                        getUserMediaImpl.disposeAllTracks();
 
-                // 4. Dispose factory (frees C++ factory + 3 threads)
-                if (mFactory != null) {
-                    mFactory.dispose();
-                    mFactory = null;
-                }
+                        // 4. Dispose factory (frees C++ factory + 3 threads)
+                        if (mFactory != null) {
+                            mFactory.dispose();
+                            mFactory = null;
+                        }
 
-                return null;
-            }).get();
+                        return null;
+                    })
+                    .get();
         } catch (InterruptedException | ExecutionException e) {
             Log.e(TAG, "invalidate() error", e);
         }
@@ -199,28 +203,28 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
         });
 
-        return JavaAudioDeviceModule
-                .builder(reactContext)
+        return JavaAudioDeviceModule.builder(reactContext)
                 .setUseHardwareAcousticEchoCanceler(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseHardwareNoiseSuppressor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseStereoOutput(true)
-                .setAudioBufferCallback((audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
-                    // 1. Speech activity detection on raw mic data, BEFORE any mutation.
-                    speechActivityDetector.processBuffer(audioBuffer, bytesRead);
+                .setAudioBufferCallback(
+                        (audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
+                            // 1. Speech activity detection on raw mic data, BEFORE any mutation.
+                            speechActivityDetector.processBuffer(audioBuffer, bytesRead);
 
-                    // 2. Existing screen-audio mixing — mutates audioBuffer in place.
-                    if (bytesRead > 0) {
-                        WebRTCModuleOptions.ScreenAudioBytesProvider provider =
-                                WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
-                        if (provider != null) {
-                            java.nio.ByteBuffer screenBuffer = provider.getScreenAudioBytes(bytesRead);
-                            if (screenBuffer != null && screenBuffer.remaining() > 0) {
-                                mixScreenAudioIntoBuffer(audioBuffer, screenBuffer, bytesRead);
+                            // 2. Existing screen-audio mixing — mutates audioBuffer in place.
+                            if (bytesRead > 0) {
+                                WebRTCModuleOptions.ScreenAudioBytesProvider provider =
+                                        WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
+                                if (provider != null) {
+                                    java.nio.ByteBuffer screenBuffer = provider.getScreenAudioBytes(bytesRead);
+                                    if (screenBuffer != null && screenBuffer.remaining() > 0) {
+                                        mixScreenAudioIntoBuffer(audioBuffer, screenBuffer, bytesRead);
+                                    }
+                                }
                             }
-                        }
-                    }
-                    return captureTimeNs;
-                })
+                            return captureTimeNs;
+                        })
                 .setAudioRecordStateCallback(new JavaAudioDeviceModule.AudioRecordStateCallback() {
                     @Override
                     public void onWebRtcAudioRecordStart() {
@@ -241,9 +245,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
      * within its own bounds. When one buffer is shorter, the other's samples pass
      * through unmodified (mic samples stay as-is, or screen-only samples are written).
      */
-    private static void mixScreenAudioIntoBuffer(java.nio.ByteBuffer micBuffer,
-                                                  java.nio.ByteBuffer screenBuffer,
-                                                  int bytesRead) {
+    private static void mixScreenAudioIntoBuffer(
+            java.nio.ByteBuffer micBuffer, java.nio.ByteBuffer screenBuffer, int bytesRead) {
         micBuffer.position(0);
         screenBuffer.position(0);
 
@@ -687,8 +690,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             MediaStreamTrack track = getLocalTrack(trackId);
                             transceiver = pco.addTransceiver(
                                     track, SerializeUtils.parseTransceiverOptions(options.getMap("init")));
-                            
-                            // Add mute detection for local video tracks (dimension detection is handled at track creation)
+
+                            // Add mute detection for local video tracks (dimension detection is handled at track
+                            // creation)
                             if (track instanceof VideoTrack) {
                                 pco.videoTrackAdapters.addAdapter((VideoTrack) track);
                             }
@@ -744,7 +748,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             }
                         }
                         RtpSender sender = pco.getPeerConnection().addTrack(track, streamIds);
-                        
+
                         // Add mute detection for local video tracks (dimension detection is handled at track creation)
                         if (track instanceof VideoTrack) {
                             pco.videoTrackAdapters.addAdapter((VideoTrack) track);
@@ -1169,12 +1173,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         return transceiverUpdates;
     }
 
-
     @ReactMethod
     public void mediaStreamTrackSetVideoEffects(String id, ReadableArray names) {
-        ThreadUtils.runOnExecutor(() -> {
-            getUserMediaImpl.setVideoEffects(id, names);
-        });
+        ThreadUtils.runOnExecutor(() -> { getUserMediaImpl.setVideoEffects(id, names); });
     }
 
     @ReactMethod
@@ -1510,10 +1511,13 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 return;
             }
 
-            IceCandidate candidate = new IceCandidate(
-                candidateMap.hasKey("sdpMid") && !candidateMap.isNull("sdpMid") ? candidateMap.getString("sdpMid")  : "",
-                candidateMap.hasKey("sdpMLineIndex") && !candidateMap.isNull("sdpMLineIndex")  ? candidateMap.getInt("sdpMLineIndex") : 0,
-                candidateMap.getString("candidate"));
+            IceCandidate candidate = new IceCandidate(candidateMap.hasKey("sdpMid") && !candidateMap.isNull("sdpMid")
+                            ? candidateMap.getString("sdpMid")
+                            : "",
+                    candidateMap.hasKey("sdpMLineIndex") && !candidateMap.isNull("sdpMLineIndex")
+                            ? candidateMap.getInt("sdpMLineIndex")
+                            : 0,
+                    candidateMap.getString("candidate"));
 
             peerConnection.addIceCandidate(candidate, new AddIceObserver() {
                 @Override
@@ -1762,7 +1766,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
                 try {
                     CertificateFactory cf = CertificateFactory.getInstance("X.509");
-                    ByteArrayInputStream is = new ByteArrayInputStream(cert.certificate.getBytes(StandardCharsets.UTF_8));
+                    ByteArrayInputStream is =
+                            new ByteArrayInputStream(cert.certificate.getBytes(StandardCharsets.UTF_8));
                     X509Certificate x509Cert = (X509Certificate) cf.generateCertificate(is);
 
                     MessageDigest digest = MessageDigest.getInstance("SHA-256");

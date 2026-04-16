@@ -3,7 +3,7 @@
 #import "InAppScreenCaptureController.h"
 #import "InAppScreenCapturer.h"
 
-@interface InAppScreenCaptureController () <CapturerEventsDelegate>
+@interface InAppScreenCaptureController ()<CapturerEventsDelegate>
 @end
 
 @implementation InAppScreenCaptureController
@@ -31,11 +31,7 @@
 }
 
 - (NSDictionary *)getSettings {
-    return @{
-        @"deviceId": self.deviceId ?: @"in-app-screen-capture",
-        @"groupId": @"",
-        @"frameRate": @(30)
-    };
+    return @{@"deviceId" : self.deviceId ?: @"in-app-screen-capture", @"groupId" : @"", @"frameRate" : @(30)};
 }
 
 #pragma mark - CapturerEventsDelegate

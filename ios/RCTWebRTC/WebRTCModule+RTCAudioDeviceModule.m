@@ -30,37 +30,61 @@
 RCT_EXPORT_METHOD(audioDeviceModuleStartPlayout
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM startPlayout] operation:@"start playout" code:@"playout_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM startPlayout]
+                operation:@"start playout"
+                     code:@"playout_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStopPlayout
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM stopPlayout] operation:@"stop playout" code:@"playout_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM stopPlayout]
+                operation:@"stop playout"
+                     code:@"playout_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStartRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM startRecording] operation:@"start recording" code:@"recording_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM startRecording]
+                operation:@"start recording"
+                     code:@"recording_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStopRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM stopRecording] operation:@"stop recording" code:@"recording_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM stopRecording]
+                operation:@"stop recording"
+                     code:@"recording_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStartLocalRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM initAndStartRecording] operation:@"start local recording" code:@"recording_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM initAndStartRecording]
+                operation:@"start local recording"
+                     code:@"recording_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_METHOD(audioDeviceModuleStopLocalRecording
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM stopRecording] operation:@"stop local recording" code:@"recording_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM stopRecording]
+                operation:@"stop local recording"
+                     code:@"recording_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 #pragma mark - Microphone Control
@@ -69,7 +93,11 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetMicrophoneMuted
                   : (BOOL)muted resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM setMicrophoneMuted:muted] operation:@"set microphone mute" code:@"mute_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM setMicrophoneMuted:muted]
+                operation:@"set microphone mute"
+                     code:@"mute_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleIsMicrophoneMuted) {
@@ -82,7 +110,11 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetVoiceProcessingEnabled
                   : (BOOL)enabled resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM setVoiceProcessingEnabled:enabled] operation:@"set voice processing" code:@"voice_processing_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM setVoiceProcessingEnabled:enabled]
+                operation:@"set voice processing"
+                     code:@"voice_processing_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleIsVoiceProcessingEnabled) {
@@ -127,7 +159,11 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetMuteMode
                   : (NSInteger)mode resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM setMuteMode:(RTCAudioEngineMuteMode)mode] operation:@"set mute mode" code:@"mute_mode_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM setMuteMode:(RTCAudioEngineMuteMode)mode]
+                operation:@"set mute mode"
+                     code:@"mute_mode_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(audioDeviceModuleGetMuteMode) {
@@ -160,7 +196,11 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetRecordingAlwaysPreparedMode
                   : (BOOL)enabled resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    [self handleADMResult:[RAW_ADM setRecordingAlwaysPreparedMode:enabled] operation:@"set recording always prepared mode" code:@"recording_always_prepared_mode_error" resolve:resolve reject:reject];
+    [self handleADMResult:[RAW_ADM setRecordingAlwaysPreparedMode:enabled]
+                operation:@"set recording always prepared mode"
+                     code:@"recording_always_prepared_mode_error"
+                  resolve:resolve
+                   reject:reject];
 }
 
 // TODO: `getEngineAvailability` / `setEngineAvailability` were dropped because the

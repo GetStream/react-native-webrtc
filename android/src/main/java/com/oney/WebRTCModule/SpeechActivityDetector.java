@@ -45,7 +45,6 @@ import java.nio.ShortBuffer;
  * the listener is responsible for dispatching to the JS thread.
  */
 class SpeechActivityDetector {
-
     interface Listener {
         void onSpeechStarted();
         void onSpeechEnded();

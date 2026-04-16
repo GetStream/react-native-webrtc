@@ -87,10 +87,8 @@ static NSMutableDictionary<NSString *, RTCCertificate *> *gCertificates = nil;
 
 int _transceiverNextId = 0;
 
-
--(nullable RTCRtpSender *)getSenderByPeerConnectionId: (nonnull NSNumber *)peerConnectionId
-                                             senderId: (nonnull NSString *)senderId {
-    
+- (nullable RTCRtpSender *)getSenderByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                              senderId:(nonnull NSString *)senderId {
     RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
     if (!peerConnection) {
         RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
@@ -103,12 +101,11 @@ int _transceiverNextId = 0;
             break;
         }
     }
-    
+
     return sender;
 }
--(nullable RTCRtpReceiver *)getReceiverByPeerConnectionId: (nonnull NSNumber *)peerConnectionId
-                                               receiverId: (nonnull NSString *)receiverId {
-    
+- (nullable RTCRtpReceiver *)getReceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                                receiverId:(nonnull NSString *)receiverId {
     RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
     if (!peerConnection) {
         RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
@@ -121,12 +118,12 @@ int _transceiverNextId = 0;
             break;
         }
     }
-    
+
     return receiver;
 }
 
--(nullable RTCRtpTransceiver *)getTransceiverByPeerConnectionId: (nonnull NSNumber *)peerConnectionId
-                                                  transceiverId: (nonnull NSString *)transceiverId {
+- (nullable RTCRtpTransceiver *)getTransceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                                   transceiverId:(nonnull NSString *)transceiverId {
     RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
     if (!peerConnection) {
         RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
@@ -139,7 +136,7 @@ int _transceiverNextId = 0;
             break;
         }
     }
-    
+
     return transceiver;
 }
 /*
@@ -538,13 +535,13 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionAddTrack
 
         NSArray *streamIds = [options objectForKey:@"streamIds"];
         RTCRtpSender *sender = [peerConnection addTrack:track streamIds:streamIds];
-        
+
         // Add mute detection for local video tracks (dimension detection handled at track creation)
         if (track.kind == kRTCMediaStreamTrackKindVideo) {
             RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
             [peerConnection addVideoTrackAdapter:videoTrack];
         }
-        
+
         RTCRtpTransceiver *transceiver = nil;
 
         for (RTCRtpTransceiver *t in peerConnection.transceivers) {
@@ -608,7 +605,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionAddTransceiver
             RTCRtpTransceiverInit *transceiverInit = [SerializeUtils parseTransceiverOptions:initOptions];
 
             transceiver = [peerConnection addTransceiverWithTrack:track init:transceiverInit];
-            
+
             // Add mute detection for local video tracks (dimension detection handled at track creation)
             if (track && track.kind == kRTCMediaStreamTrackKindVideo && self.localTracks[trackId]) {
                 RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
@@ -1055,8 +1052,10 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
     // Unused in Unified Plan.
 }
 
-RCT_EXPORT_METHOD(generateCertificate : (NSDictionary *)options resolver : (RCTPromiseResolveBlock)
-                      resolve rejecter : (RCTPromiseRejectBlock)reject) {
+RCT_EXPORT_METHOD(generateCertificate
+                  : (NSDictionary *)options resolver
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
     NSString *keyType = @"ECDSA";
     if (options[@"keyType"]) {
         NSString *type = options[@"keyType"];

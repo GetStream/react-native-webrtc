@@ -128,7 +128,6 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         return peerConnection.addTransceiver(track, init);
     }
 
-
     RtpReceiver getReceiver(String id) {
         if (this.peerConnection == null) {
             return null;
@@ -278,7 +277,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             return;
         }
 
-        peerConnection.getStats(targetReceiver, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
+        peerConnection.getStats(
+                targetReceiver, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
     }
 
     public void senderGetStats(String senderId, Promise promise) {
@@ -296,7 +296,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             return;
         }
 
-        peerConnection.getStats(targetSender, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
+        peerConnection.getStats(
+                targetSender, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
     }
 
     @Override

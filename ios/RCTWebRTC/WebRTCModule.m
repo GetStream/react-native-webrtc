@@ -74,7 +74,9 @@
 
         if (encoderFactory == nil) {
             RTCDefaultVideoEncoderFactory *videoEncoderFactory = [[RTCDefaultVideoEncoderFactory alloc] init];
-            RTCVideoEncoderFactorySimulcast *simulcastVideoEncoderFactory = [[RTCVideoEncoderFactorySimulcast alloc] initWithPrimary:videoEncoderFactory fallback:videoEncoderFactory];
+            RTCVideoEncoderFactorySimulcast *simulcastVideoEncoderFactory =
+                [[RTCVideoEncoderFactorySimulcast alloc] initWithPrimary:videoEncoderFactory
+                                                                fallback:videoEncoderFactory];
             encoderFactory = simulcastVideoEncoderFactory;
         }
         if (decoderFactory == nil) {
@@ -89,17 +91,17 @@
         // Always ensure an audio processing module exists so screen share
         // audio mixing can use capturePostProcessingDelegate at runtime.
         if (audioProcessingModule == nil && audioDevice == nil) {
-            audioProcessingModule = [[RTCDefaultAudioProcessingModule alloc]
-                initWithConfig:nil
-                capturePostProcessingDelegate:nil
-                renderPreProcessingDelegate:nil];
+            audioProcessingModule = [[RTCDefaultAudioProcessingModule alloc] initWithConfig:nil
+                                                              capturePostProcessingDelegate:nil
+                                                                renderPreProcessingDelegate:nil];
             options.audioProcessingModule = audioProcessingModule;
             RCTLogInfo(@"Created default audio processing module for screen share audio mixing");
         }
 
         if (audioProcessingModule != nil) {
             if (audioDevice != nil) {
-                NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring audioDevice.");
+                NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring "
+                      @"audioDevice.");
             }
             RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
 
