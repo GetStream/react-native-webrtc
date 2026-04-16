@@ -83,14 +83,8 @@ public class RTCCryptoManager {
 //
 
     private FrameCryptorAlgorithm frameCryptorAlgorithmFromInt(int algorithm) {
-        switch (algorithm) {
-            case 0:
-                return FrameCryptorAlgorithm.AES_GCM;
-            case 1:
-                return FrameCryptorAlgorithm.AES_CBC;
-            default:
-                return FrameCryptorAlgorithm.AES_GCM;
-        }
+        // StreamWebRTC M137 only supports AES_GCM
+        return FrameCryptorAlgorithm.AES_GCM;
     }
 
     public String frameCryptorFactoryCreateFrameCryptor(ReadableMap params) {
