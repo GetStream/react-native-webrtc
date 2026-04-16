@@ -1,4 +1,4 @@
-import { Event, EventTarget, defineEventAttribute } from 'event-target-shim/index';
+import { Event, EventTarget, getEventAttributeValue, setEventAttributeValue } from './vendor/event-target-shim';
 import { NativeModules } from 'react-native';
 
 import { addListener, removeListener } from './EventEmitter';
@@ -52,6 +52,14 @@ export enum RTCFrameCryptorState {
 export default class RTCFrameCryptor extends EventTarget<RTCFrameCryptorEventMap> {
     private _frameCryptorId: string;
     private _participantId: string;
+
+    get onframecryptorstatechanged() {
+        return getEventAttributeValue(this, 'onframecryptorstatechanged');
+    }
+
+    set onframecryptorstatechanged(value) {
+        setEventAttributeValue(this, 'onframecryptorstatechanged', value);
+    }
 
     constructor(frameCryptorId: string, participantId: string) {
         super();
@@ -155,9 +163,3 @@ export default class RTCFrameCryptor extends EventTarget<RTCFrameCryptorEventMap
     }
 }
 
-/**
- * Define the `onxxx` event handlers.
- */
-const proto = RTCFrameCryptor.prototype;
-
-defineEventAttribute(proto, 'onframecryptorstatechanged');
