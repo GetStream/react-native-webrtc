@@ -461,21 +461,21 @@ RCT_EXPORT_METHOD(keyProviderDispose
     resolve(@{@"result" : @"success"});
 }
 
-- (NSString *)stringFromState:(FrameCryptionState)state {
+- (NSString *)stringFromState:(RTCFrameCryptorState)state {
     switch (state) {
-        case FrameCryptionStateNew:
+        case RTCFrameCryptorStateNew:
             return @"new";
-        case FrameCryptionStateOk:
+        case RTCFrameCryptorStateOk:
             return @"ok";
-        case FrameCryptionStateEncryptionFailed:
+        case RTCFrameCryptorStateEncryptionFailed:
             return @"encryptionFailed";
-        case FrameCryptionStateDecryptionFailed:
+        case RTCFrameCryptorStateDecryptionFailed:
             return @"decryptionFailed";
-        case FrameCryptionStateMissingKey:
+        case RTCFrameCryptorStateMissingKey:
             return @"missingKey";
-        case FrameCryptionStateKeyRatcheted:
+        case RTCFrameCryptorStateKeyRatcheted:
             return @"keyRatcheted";
-        case FrameCryptionStateInternalError:
+        case RTCFrameCryptorStateInternalError:
             return @"internalError";
         default:
             return @"unknown";
@@ -588,7 +588,7 @@ RCT_EXPORT_METHOD(dataPacketCryptorDispose
 
 - (void)frameCryptor:(RTC_OBJC_TYPE(RTCFrameCryptor) *)frameCryptor
     didStateChangeWithParticipantId:(NSString *)participantId
-                          withState:(FrameCryptionState)stateChanged {
+                          withState:(RTCFrameCryptorState)stateChanged {
     
     id frameCryptorId = objc_getAssociatedObject(frameCryptor, &frameCryptorUUIDKey);
     
