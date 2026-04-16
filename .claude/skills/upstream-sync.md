@@ -137,3 +137,5 @@ Post-sync: `grep -r "org.webrtc:google-webrtc\|webrtc-ios" --include="*.gradle" 
 6. **Advance merge-base for EVERY upstream remote.** If syncing with multiple upstreams, merge each one separately. Otherwise the un-advanced remote replays all its history on the next merge.
 
 7. **Upstream podspec/build files leak into cherry-picks.** Other forks have their own podspec (e.g., `livekit-react-native-webrtc.podspec`). Always `git rm` them when they appear.
+
+8. **Cross-check cherry-picks against all upstreams for reverts.** Before cherry-picking a commit from one upstream, search the other upstreams for the same change — it may have been tried and reverted. Run: `git log --all --oneline -S "<key code snippet>"` to find if the same change exists elsewhere in history with a subsequent revert.
