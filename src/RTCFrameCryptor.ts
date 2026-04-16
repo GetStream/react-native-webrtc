@@ -8,7 +8,7 @@ const { WebRTCModule } = NativeModules;
 
 const log = new Logger('pc');
 
-type FRAME_CRYPTOR_EVENTS =  'onframecryptorstatechanged';
+type FRAME_CRYPTOR_EVENTS =  'framecryptorstatechanged';
 
 interface IRTCDataChannelEventInitDict extends Event.EventInit {
     frameCryptor: RTCFrameCryptor;
@@ -37,7 +37,7 @@ TEventType extends FRAME_CRYPTOR_EVENTS
 }
 
 type RTCFrameCryptorEventMap = {
-    onframecryptorstatechanged: RTCFrameCryptorStateEvent<'onframecryptorstatechanged'>;
+    framecryptorstatechanged: RTCFrameCryptorStateEvent<'framecryptorstatechanged'>;
 }
 
 export enum RTCFrameCryptorState {
@@ -55,11 +55,11 @@ export default class RTCFrameCryptor extends EventTarget<RTCFrameCryptorEventMap
     private _participantId: string;
 
     get onframecryptorstatechanged() {
-        return getEventAttributeValue(this, 'onframecryptorstatechanged');
+        return getEventAttributeValue(this, 'framecryptorstatechanged');
     }
 
     set onframecryptorstatechanged(value) {
-        setEventAttributeValue(this, 'onframecryptorstatechanged', value);
+        setEventAttributeValue(this, 'framecryptorstatechanged', value);
     }
 
     constructor(frameCryptorId: string, participantId: string) {
@@ -159,7 +159,7 @@ export default class RTCFrameCryptor extends EventTarget<RTCFrameCryptorEventMap
                 state: ev.state,
             };
 
-            this.dispatchEvent(new RTCFrameCryptorStateEvent('onframecryptorstatechanged', initDict));
+            this.dispatchEvent(new RTCFrameCryptorStateEvent('framecryptorstatechanged', initDict));
         });
     }
 }
