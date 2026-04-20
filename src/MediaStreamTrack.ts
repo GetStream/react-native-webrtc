@@ -61,9 +61,7 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
         this._constraints = info.constraints || {};
         this._enabled = info.enabled;
         this._settings = info.settings || {};
-        // Per W3C spec, remote tracks start muted; native adapter fires unmute
-        // when first media data arrives. Local tracks start unmuted.
-        this._muted = this.remote;
+        this._muted = false;
         this._peerConnectionId = info.peerConnectionId;
         this._readyState = info.readyState;
 
@@ -188,12 +186,6 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
     _setMutedInternal(muted: boolean) {
         if (!this.remote) {
             throw new Error('Track is not remote!');
-        }
-
-        // W3C mediacapture-main "set a track's muted state": if the current
-        // muted state already equals the new value, abort — no event fires.
-        if (this._muted === muted) {
-            return;
         }
 
         this._muted = muted;

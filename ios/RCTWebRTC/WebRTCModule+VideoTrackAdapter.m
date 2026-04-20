@@ -50,8 +50,7 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
 
         _disposed = NO;
         _frameCount = 0;
-        // Per W3C spec, remote tracks MUST start muted.
-        _muted = YES;
+        _muted = NO;
         _timer = nil;
     }
 
@@ -113,13 +112,7 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
 }
 
 - (void)renderFrame:(nullable RTCVideoFrame *)frame {
-    // atomic_fetch_add returns the prior value; == 0 is the atomic "first
-    // frame" check — fire unmute immediately instead of waiting up to
-    // INITIAL_MUTE_DELAY for the periodic timer.
-    if (atomic_fetch_add(&_frameCount, 1) == 0 && self->_muted) {
-        self->_muted = NO;
-        [self emitMuteEvent:NO];
-    }
+    atomic_fetch_add(&_frameCount, 1);
 }
 
 - (void)setSize:(CGSize)size {

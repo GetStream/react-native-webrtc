@@ -101,8 +101,7 @@ public class VideoTrackAdapter {
         private TimerTask emitMuteTask;
         private volatile boolean disposed;
         private AtomicInteger frameCounter;
-        // Per W3C spec, remote tracks MUST start muted.
-        private volatile boolean mutedState = true;
+        private boolean mutedState;
         private final String trackId;
 
         TrackMuteUnmuteImpl(String trackId) {
@@ -112,13 +111,7 @@ public class VideoTrackAdapter {
 
         @Override
         public void onFrame(VideoFrame frame) {
-            // incrementAndGet() == 1 is the atomic "first frame" check — fire
-            // unmute immediately instead of waiting up to INITIAL_MUTE_DELAY
-            // for the periodic timer.
-            if (frameCounter.incrementAndGet() == 1 && mutedState) {
-                mutedState = false;
-                emitMuteEvent(false);
-            }
+            frameCounter.addAndGet(1);
         }
 
         private void start() {

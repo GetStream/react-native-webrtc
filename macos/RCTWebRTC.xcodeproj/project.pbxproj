@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		0779C0B624D7C79B00E3B7C6 /* WebRTCModule+RTCPeerConnection.m in Sources */ = {isa = PBXBuildFile; fileRef = 35A2223F1CB493C00015FD5C /* WebRTCModule+RTCPeerConnection.m */; };
 		0779C0B724D7C79B00E3B7C6 /* WebRTCModule+VideoTrackAdapter.m in Sources */ = {isa = PBXBuildFile; fileRef = 0B56CFFF212C12EF00213CEE /* WebRTCModule+VideoTrackAdapter.m */; };
-		A100000124D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.m in Sources */ = {isa = PBXBuildFile; fileRef = A100000324D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.m */; };
 		0779C0B824D7C79B00E3B7C6 /* WebRTCModule+RTCMediaStream.m in Sources */ = {isa = PBXBuildFile; fileRef = 35A2223D1CB493C00015FD5C /* WebRTCModule+RTCMediaStream.m */; };
 		0779C0B924D7C79B00E3B7C6 /* VideoCaptureController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0BDDA6DF20C18B6B00B38B45 /* VideoCaptureController.m */; };
 		0779C0BA24D7C79B00E3B7C6 /* RTCMediaStreamTrack+React.m in Sources */ = {isa = PBXBuildFile; fileRef = 0BDDA6DC20C17E7C00B38B45 /* RTCMediaStreamTrack+React.m */; };
@@ -37,8 +36,6 @@
 		0779C0C524D7C79B00E3B7C6 /* libRCTWebRTC-macos.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libRCTWebRTC-macos.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B56CFFE212C12EF00213CEE /* WebRTCModule+VideoTrackAdapter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "WebRTCModule+VideoTrackAdapter.h"; sourceTree = "<group>"; };
 		0B56CFFF212C12EF00213CEE /* WebRTCModule+VideoTrackAdapter.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "WebRTCModule+VideoTrackAdapter.m"; sourceTree = "<group>"; };
-		A100000224D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "WebRTCModule+AudioTrackAdapter.h"; sourceTree = "<group>"; };
-		A100000324D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "WebRTCModule+AudioTrackAdapter.m"; sourceTree = "<group>"; };
 		0BC6C06B217F1D54005DCD37 /* WebRTCModule+Permissions.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "WebRTCModule+Permissions.m"; sourceTree = "<group>"; };
 		0BDDA6DC20C17E7C00B38B45 /* RTCMediaStreamTrack+React.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "RTCMediaStreamTrack+React.m"; sourceTree = "<group>"; };
 		0BDDA6DE20C17EA400B38B45 /* RTCMediaStreamTrack+React.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "RTCMediaStreamTrack+React.h"; sourceTree = "<group>"; };
@@ -106,8 +103,6 @@
 				35A2223F1CB493C00015FD5C /* WebRTCModule+RTCPeerConnection.m */,
 				0B56CFFE212C12EF00213CEE /* WebRTCModule+VideoTrackAdapter.h */,
 				0B56CFFF212C12EF00213CEE /* WebRTCModule+VideoTrackAdapter.m */,
-				A100000224D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.h */,
-				A100000324D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.m */,
 				35A222441CB493C00015FD5C /* WebRTCModule.h */,
 				35A222451CB493C00015FD5C /* WebRTCModule.m */,
 			);
@@ -176,7 +171,6 @@
 			files = (
 				0779C0B624D7C79B00E3B7C6 /* WebRTCModule+RTCPeerConnection.m in Sources */,
 				0779C0B724D7C79B00E3B7C6 /* WebRTCModule+VideoTrackAdapter.m in Sources */,
-				A100000124D7C79B00E3B7C6 /* WebRTCModule+AudioTrackAdapter.m in Sources */,
 				0779C0B824D7C79B00E3B7C6 /* WebRTCModule+RTCMediaStream.m in Sources */,
 				0779C0B924D7C79B00E3B7C6 /* VideoCaptureController.m in Sources */,
 				0779C0BA24D7C79B00E3B7C6 /* RTCMediaStreamTrack+React.m in Sources */,
