@@ -10,6 +10,7 @@ import org.webrtc.VideoSink;
 import org.webrtc.VideoTrack;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -102,7 +103,7 @@ public class VideoTrackAdapter {
         private volatile boolean disposed;
         private AtomicInteger frameCounter;
         // Per W3C spec, remote tracks MUST start muted.
-        private volatile boolean mutedState = true;
+        private final AtomicBoolean mutedState = new AtomicBoolean(true);
         private final String trackId;
 
         TrackMuteUnmuteImpl(String trackId) {
@@ -114,9 +115,9 @@ public class VideoTrackAdapter {
         public void onFrame(VideoFrame frame) {
             // incrementAndGet() == 1 is the atomic "first frame" check — fire
             // unmute immediately instead of waiting up to INITIAL_MUTE_DELAY
-            // for the periodic timer.
-            if (frameCounter.incrementAndGet() == 1 && mutedState) {
-                mutedState = false;
+            // for the periodic timer. CAS guards against a race with the
+            // timer's first tick, which also writes mutedState.
+            if (frameCounter.incrementAndGet() == 1 && mutedState.compareAndSet(true, false)) {
                 emitMuteEvent(false);
             }
         }
@@ -139,8 +140,7 @@ public class VideoTrackAdapter {
                             return;
                         }
                         boolean isMuted = lastFrameNumber == frameCounter.get();
-                        if (isMuted != mutedState) {
-                            mutedState = isMuted;
+                        if (mutedState.compareAndSet(!isMuted, isMuted)) {
                             emitMuteEvent(isMuted);
                         }
 
