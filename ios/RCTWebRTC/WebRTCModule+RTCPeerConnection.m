@@ -18,6 +18,7 @@
 #import <WebRTC/RTCStatisticsReport.h>
 
 #import "SerializeUtils.h"
+#import "WebRTCModule+AudioTrackAdapter.h"
 #import "WebRTCModule+RTCDataChannel.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule+VideoTrackAdapter.h"
@@ -165,6 +166,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionInit
         peerConnection.remoteTracks = [NSMutableDictionary new];
         peerConnection.videoTrackAdapters = [NSMutableDictionary new];
         peerConnection.videoDimensionDetectors = [NSMutableDictionary new];
+        peerConnection.audioTrackAdapters = [NSMutableDictionary new];
         peerConnection.webRTCModule = self;
 
         self.peerConnections[objectID] = peerConnection;
@@ -395,12 +397,14 @@ RCT_EXPORT_METHOD(peerConnectionDispose : (nonnull NSNumber *)objectID) {
         return;
     }
 
-    // Remove video track adapters
+    // Remove track adapters for remote tracks
     for (NSString *key in peerConnection.remoteTracks.allKeys) {
         RTCMediaStreamTrack *track = peerConnection.remoteTracks[key];
         if (track.kind == kRTCMediaStreamTrackKindVideo) {
             [peerConnection removeVideoTrackAdapter:(RTCVideoTrack *)track];
             [peerConnection removeVideoDimensionDetector:(RTCVideoTrack *)track];
+        } else if (track.kind == kRTCMediaStreamTrackKindAudio) {
+            [peerConnection removeAudioTrackAdapter:(RTCAudioTrack *)track];
         }
     }
 
@@ -981,6 +985,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
                 [peerConnection addVideoDimensionDetector:videoTrack];
             } else if (track.kind == kRTCMediaStreamTrackKindAudio) {
                 RTCAudioTrack *audioTrack = (RTCAudioTrack *)track;
+                [peerConnection addAudioTrackAdapter:audioTrack];
                 WebRTCModuleOptions *options = [WebRTCModuleOptions sharedInstance];
                 audioTrack.source.volume = options.defaultTrackVolume;
             }

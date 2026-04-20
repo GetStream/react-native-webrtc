@@ -90,6 +90,10 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
     _transceivers: { order: number, transceiver: RTCRtpTransceiver }[];
     _remoteStreams: Map<string, MediaStream>;
     _pendingTrackEvents: any[];
+    // Native mute events that arrived before the matching JS track was
+    // constructed (can happen on fast/loopback connections). Drained when the
+    // remote track is created in setRemoteDescription.
+    _pendingMuteStates: Map<string, boolean>;
 
     static generateCertificate(
         keygenAlgorithm: string | {
@@ -173,6 +177,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         this._transceivers = [];
         this._remoteStreams = new Map();
         this._pendingTrackEvents = [];
+        this._pendingMuteStates = new Map();
 
         this._registerEvents();
 
@@ -374,6 +379,19 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             const newSender = new RTCRtpSender({ ...transceiver.sender, track: null });
             const remoteTrack
                 = transceiver.receiver.track ? new MediaStreamTrack(transceiver.receiver.track) : null;
+
+            // Apply any mute state emitted by the native adapter before this
+            // track existed in JS. Idempotence guard in _setMutedInternal
+            // prevents a spurious event if the buffered value matches default.
+            if (remoteTrack) {
+                const pendingMuted = this._pendingMuteStates.get(remoteTrack.id);
+
+                if (pendingMuted !== undefined) {
+                    this._pendingMuteStates.delete(remoteTrack.id);
+                    remoteTrack._setMutedInternal(pendingMuted);
+                }
+            }
+
             const newReceiver = new RTCRtpReceiver({ ...transceiver.receiver, track: remoteTrack });
             const newTransceiver = new RTCRtpTransceiver({
                 ...transceiver,
@@ -444,8 +462,9 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
                 stream.dispatchEvent(new MediaStreamTrackEvent('addtrack', { track }));
             });
 
-            // Dispatch an unmute event for the track.
-            track._setMutedInternal(false);
+            // Per W3C spec, remote tracks MUST be muted in ontrack. Native
+            // adapters own the mute lifecycle: they fire unmute when the first
+            // media data arrives and mute when the stream stalls.
         }
 
         log.debug(`${this._pcId} setRemoteDescription OK`);
@@ -852,6 +871,11 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
 
             if (track) {
                 track._setMutedInternal(ev.muted);
+            } else {
+                // Track not yet constructed in JS (native fired before
+                // setRemoteDescription finished). Buffer the latest state;
+                // it will be applied when the track is created.
+                this._pendingMuteStates.set(ev.trackId, ev.muted);
             }
         });
 
