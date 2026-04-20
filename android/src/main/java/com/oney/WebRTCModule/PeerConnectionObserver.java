@@ -11,6 +11,7 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 
+import org.webrtc.AudioTrack;
 import org.webrtc.DataChannel;
 import org.webrtc.IceCandidate;
 import org.webrtc.MediaStream;
@@ -125,6 +126,20 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         }
 
         return peerConnection.addTransceiver(track, init);
+    }
+
+    RtpReceiver getReceiver(String id) {
+        if (this.peerConnection == null) {
+            return null;
+        }
+
+        for (RtpReceiver receiver : this.peerConnection.getReceivers()) {
+            if (receiver.id().equals(id)) {
+                return receiver;
+            }
+        }
+
+        return null;
     }
 
     RtpSender getSender(String id) {
@@ -262,7 +277,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             return;
         }
 
-        peerConnection.getStats(targetReceiver, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
+        peerConnection.getStats(
+                targetReceiver, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
     }
 
     public void senderGetStats(String senderId, Promise promise) {
@@ -280,7 +296,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             return;
         }
 
-        peerConnection.getStats(targetSender, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
+        peerConnection.getStats(
+                targetSender, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
     }
 
     @Override
@@ -445,6 +462,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
                 if (track.kind().equals(MediaStreamTrack.VIDEO_TRACK_KIND)) {
                     videoTrackAdapters.addAdapter((VideoTrack) track);
                     videoTrackAdapters.addDimensionDetector((VideoTrack) track);
+                } else if (track.kind().equals(MediaStreamTrack.AUDIO_TRACK_KIND)) {
+                    ((AudioTrack) track).setVolume(WebRTCModuleOptions.getInstance().defaultTrackVolume);
                 }
                 remoteTracks.put(track.id(), track);
             }

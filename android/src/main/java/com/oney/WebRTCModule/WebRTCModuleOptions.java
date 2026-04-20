@@ -2,6 +2,7 @@ package com.oney.WebRTCModule;
 
 import com.oney.WebRTCModule.audio.AudioProcessingFactoryProvider;
 
+import org.webrtc.AudioProcessingFactory;
 import org.webrtc.Loggable;
 import org.webrtc.Logging;
 import org.webrtc.VideoDecoderFactory;
@@ -9,6 +10,7 @@ import org.webrtc.VideoEncoderFactory;
 import org.webrtc.audio.AudioDeviceModule;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.Callable;
 
 public class WebRTCModuleOptions {
     private static WebRTCModuleOptions instance;
@@ -16,11 +18,14 @@ public class WebRTCModuleOptions {
     public VideoEncoderFactory videoEncoderFactory;
     public VideoDecoderFactory videoDecoderFactory;
     public AudioDeviceModule audioDeviceModule;
+    public Callable<AudioProcessingFactory> audioProcessingFactoryFactory;
+
     public Loggable injectableLogger;
     public Logging.Severity loggingSeverity;
     public String fieldTrials;
     public boolean enableMediaProjectionService;
     public AudioProcessingFactoryProvider audioProcessingFactoryProvider;
+    public double defaultTrackVolume = 1.0;
 
     /**
      * Provider for screen share audio bytes. When set, the AudioDeviceModule's

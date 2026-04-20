@@ -210,7 +210,9 @@ public class VideoTrackAdapter {
             params.putInt("width", width);
             params.putInt("height", height);
 
-            Log.d(TAG, "Dimension change event pcId: " + peerConnectionId + " trackId: " + trackId + " dimensions: " + width + "x" + height);
+            Log.d(TAG,
+                    "Dimension change event pcId: " + peerConnectionId + " trackId: " + trackId
+                            + " dimensions: " + width + "x" + height);
 
             VideoTrackAdapter.this.webRTCModule.sendEvent("videoTrackDimensionChanged", params);
         }

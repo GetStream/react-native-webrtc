@@ -43,7 +43,7 @@ NS_ASSUME_NONNULL_BEGIN
         [self.module sendEventWithName:kEventAudioDeviceModuleEngineCreated body:@{}];
     }
 
-    return 0; // Success
+    return 0;  // Success
 }
 
 - (NSInteger)audioDeviceModule:(RTCAudioDeviceModule *)audioDeviceModule
@@ -62,7 +62,7 @@ NS_ASSUME_NONNULL_BEGIN
                                   }];
     }
 
-    return 0; // Success
+    return 0;  // Success
 }
 
 - (NSInteger)audioDeviceModule:(RTCAudioDeviceModule *)audioDeviceModule
@@ -81,7 +81,7 @@ NS_ASSUME_NONNULL_BEGIN
                                   }];
     }
 
-    return 0; // Success
+    return 0;  // Success
 }
 
 - (NSInteger)audioDeviceModule:(RTCAudioDeviceModule *)audioDeviceModule
@@ -100,7 +100,7 @@ NS_ASSUME_NONNULL_BEGIN
                                   }];
     }
 
-    return 0; // Success
+    return 0;  // Success
 }
 
 - (NSInteger)audioDeviceModule:(RTCAudioDeviceModule *)audioDeviceModule
@@ -119,7 +119,7 @@ NS_ASSUME_NONNULL_BEGIN
                                   }];
     }
 
-    return 0; // Success
+    return 0;  // Success
 }
 
 - (NSInteger)audioDeviceModule:(RTCAudioDeviceModule *)audioDeviceModule willReleaseEngine:(AVAudioEngine *)engine {
@@ -129,7 +129,7 @@ NS_ASSUME_NONNULL_BEGIN
         [self.module sendEventWithName:kEventAudioDeviceModuleEngineWillRelease body:@{}];
     }
 
-    return 0; // Success
+    return 0;  // Success
 }
 
 - (NSInteger)audioDeviceModule:(RTCAudioDeviceModule *)audioDeviceModule
@@ -172,7 +172,8 @@ NS_ASSUME_NONNULL_BEGIN
                                   }];
     }
 
-    RCTLog(@"[AudioDeviceModuleObserver] Audio processing state updated - VP enabled: %d, VP bypassed: %d, AGC enabled: %d, stereo: %d",
+    RCTLog(@"[AudioDeviceModuleObserver] Audio processing state updated - VP enabled: %d, VP bypassed: %d, AGC "
+           @"enabled: %d, stereo: %d",
            state.voiceProcessingEnabled,
            state.voiceProcessingBypassed,
            state.voiceProcessingAGCEnabled,

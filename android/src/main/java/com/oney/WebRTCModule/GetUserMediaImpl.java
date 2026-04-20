@@ -5,10 +5,13 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.util.Log;
+
 import androidx.core.util.Consumer;
 
 import com.facebook.react.bridge.Arguments;
@@ -18,6 +21,7 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
@@ -61,6 +65,8 @@ public class GetUserMediaImpl {
 
     private Promise displayMediaPromise;
     private Intent mediaProjectionPermissionResultData;
+    private boolean createConfigForDefaultDisplay = false;
+    private float resolutionScale = 1.0f;
 
     /**
      * Returns the MediaProjection permission result data Intent.
@@ -76,9 +82,7 @@ public class GetUserMediaImpl {
         public void onServiceConnected(ComponentName name, IBinder service) {
             // Service is now bound, you can call createScreenStream()
             Log.d(TAG, "MediaProjectionService bound, creating screen stream.");
-            ThreadUtils.runOnExecutor(() -> {
-                createScreenStream();
-            });
+            ThreadUtils.runOnExecutor(() -> { createScreenStream(); });
         }
 
         @Override
@@ -105,7 +109,6 @@ public class GetUserMediaImpl {
                     mediaProjectionPermissionResultData = data;
 
                     MediaProjectionService.launch(activity, mediaProjectionServiceConnection);
-
                 }
             }
         });
@@ -306,10 +309,11 @@ public class GetUserMediaImpl {
     void applyConstraints(String trackId, ReadableMap constraints, Promise promise) {
         TrackPrivate track = tracks.get(trackId);
         if (track != null && track.videoCaptureController instanceof AbstractVideoCaptureController) {
-            AbstractVideoCaptureController captureController = (AbstractVideoCaptureController) track.videoCaptureController;
+            AbstractVideoCaptureController captureController =
+                    (AbstractVideoCaptureController) track.videoCaptureController;
             captureController.applyConstraints(constraints, new Consumer<Exception>() {
                 public void accept(Exception e) {
-                    if(e != null) {
+                    if (e != null) {
                         promise.reject(e);
                         return;
                     }
@@ -322,7 +326,41 @@ public class GetUserMediaImpl {
         }
     }
 
-    void getDisplayMedia(Promise promise) {
+    void initializeConstraints(ReadableMap constraints) {
+        // Handle the incoming params
+
+        ReadableMap androidConstraints = null;
+        if (constraints.hasKey("android") && constraints.getType("android") == ReadableType.Map) {
+            androidConstraints = constraints.getMap("android");
+        }
+
+        // Default values
+        boolean createConfigForDefaultDisplay = false;
+        float scale = 1.0f;
+
+        if (androidConstraints != null) {
+            // MediaProjectionConfig need API level 34
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                    && androidConstraints.hasKey("createConfigForDefaultDisplay")
+                    && androidConstraints.getType("createConfigForDefaultDisplay") == ReadableType.Boolean) {
+                createConfigForDefaultDisplay = androidConstraints.getBoolean("createConfigForDefaultDisplay");
+            }
+            if (androidConstraints.hasKey("resolutionScale")
+                    && androidConstraints.getType("resolutionScale") == ReadableType.Number) {
+                scale = (float) androidConstraints.getDouble("resolutionScale");
+            }
+        }
+
+        this.createConfigForDefaultDisplay = createConfigForDefaultDisplay;
+        // Force the value in [0, 1]
+        this.resolutionScale = Math.max(0.0f, Math.min(1.0f, scale));
+
+        Log.d(TAG,
+                "initializeConstraints: createConfigForDefaultDisplay=" + this.createConfigForDefaultDisplay
+                        + " resolutionScale=" + this.resolutionScale);
+    }
+
+    void getDisplayMedia(final ReadableMap constraints, Promise promise) {
         if (this.displayMediaPromise != null) {
             promise.reject(new RuntimeException("Another operation is pending."));
             return;
@@ -334,6 +372,8 @@ public class GetUserMediaImpl {
             return;
         }
 
+        this.initializeConstraints(constraints);
+
         this.displayMediaPromise = promise;
 
         MediaProjectionManager mediaProjectionManager =
@@ -344,8 +384,18 @@ public class GetUserMediaImpl {
             UiThreadUtil.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    currentActivity.startActivityForResult(
-                            mediaProjectionManager.createScreenCaptureIntent(), PERMISSION_REQUEST_CODE);
+                    if (createConfigForDefaultDisplay == true) {
+                        // MediaProjectionConfig need API level 34
+                        // Return mediaProjection which restricts the user to capturing the default display
+                        currentActivity.startActivityForResult(
+                                mediaProjectionManager.createScreenCaptureIntent(
+                                        MediaProjectionConfig.createConfigForDefaultDisplay()),
+                                PERMISSION_REQUEST_CODE);
+                    } else {
+                        // Return mediaProjection which allows the user to decide which region is captured
+                        currentActivity.startActivityForResult(
+                                mediaProjectionManager.createScreenCaptureIntent(), PERMISSION_REQUEST_CODE);
+                    }
                 }
             });
 
@@ -442,7 +492,7 @@ public class GetUserMediaImpl {
         int width = displayMetrics.widthPixels;
         int height = displayMetrics.heightPixels;
         ScreenCaptureController screenCaptureController = new ScreenCaptureController(
-                reactContext.getCurrentActivity(), width, height, mediaProjectionPermissionResultData);
+                reactContext.getCurrentActivity(), width, height, mediaProjectionPermissionResultData, resolutionScale);
         return createVideoTrack(screenCaptureController);
     }
 
@@ -478,7 +528,8 @@ public class GetUserMediaImpl {
         localTrackAdapter.addDimensionDetector(track);
 
         track.setEnabled(true);
-        tracks.put(id, new TrackPrivate(track, videoSource, videoCaptureController, surfaceTextureHelper, localTrackAdapter));
+        tracks.put(id,
+                new TrackPrivate(track, videoSource, videoCaptureController, surfaceTextureHelper, localTrackAdapter));
 
         videoCaptureController.startCapture();
 
@@ -497,10 +548,10 @@ public class GetUserMediaImpl {
         MediaStreamTrack nativeTrack = track.track;
         final MediaStreamTrack clonedNativeTrack;
         VideoTrackAdapter clonedVideoTrackAdapter = null;
-        
+
         if (nativeTrack instanceof VideoTrack) {
             clonedNativeTrack = pcFactory.createVideoTrack(id, (VideoSource) track.mediaSource);
-            
+
             // Create dimension detection for cloned video tracks
             clonedVideoTrackAdapter = new VideoTrackAdapter(webRTCModule, -1);
             clonedVideoTrackAdapter.addDimensionDetector((VideoTrack) clonedNativeTrack);
@@ -509,13 +560,11 @@ public class GetUserMediaImpl {
         }
         clonedNativeTrack.setEnabled(nativeTrack.enabled());
 
-        final TrackPrivate clone = new TrackPrivate(
-            clonedNativeTrack,
-            track.mediaSource,
-            track.videoCaptureController,
-            track.surfaceTextureHelper,
-            clonedVideoTrackAdapter
-        );
+        final TrackPrivate clone = new TrackPrivate(clonedNativeTrack,
+                track.mediaSource,
+                track.videoCaptureController,
+                track.surfaceTextureHelper,
+                clonedVideoTrackAdapter);
         clone.setParent(track);
         tracks.put(id, clone);
 
@@ -536,26 +585,37 @@ public class GetUserMediaImpl {
             SurfaceTextureHelper surfaceTextureHelper = track.surfaceTextureHelper;
 
             if (names != null) {
-                List<VideoFrameProcessor> processors = names.toArrayList().stream()
-                    .filter(name -> name instanceof String)
-                    .map(name -> {
-                        VideoFrameProcessor videoFrameProcessor = ProcessorProvider.getProcessor((String) name);
-                        if (videoFrameProcessor == null) {
-                            Log.e(TAG, "no videoFrameProcessor associated with this name: " + name);
-                        }
-                        return videoFrameProcessor;
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+                List<VideoFrameProcessor> processors =
+                        names.toArrayList()
+                                .stream()
+                                .filter(name -> name instanceof String)
+                                .map(name -> {
+                                    VideoFrameProcessor videoFrameProcessor =
+                                            ProcessorProvider.getProcessor((String) name);
+                                    if (videoFrameProcessor == null) {
+                                        Log.e(TAG, "no videoFrameProcessor associated with this name: " + name);
+                                    }
+                                    return videoFrameProcessor;
+                                })
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toList());
 
-                VideoEffectProcessor videoEffectProcessor =
-                        new VideoEffectProcessor(processors, surfaceTextureHelper);
+                VideoEffectProcessor videoEffectProcessor = new VideoEffectProcessor(processors, surfaceTextureHelper);
                 videoSource.setVideoProcessor(videoEffectProcessor);
 
             } else {
                 videoSource.setVideoProcessor(null);
             }
         }
+    }
+
+    void registerTrack(AudioTrack track, AudioSource source) {
+        tracks.put(track.id(), new TrackPrivate(track, source, null, null));
+    }
+
+    void registerTrack(VideoTrack track, VideoSource source, AbstractVideoCaptureController controller,
+            SurfaceTextureHelper surfaceTextureHelper) {
+        tracks.put(track.id(), new TrackPrivate(track, source, controller, surfaceTextureHelper));
     }
 
     /**
@@ -669,5 +729,7 @@ public class GetUserMediaImpl {
         }
     }
 
-    public interface BiConsumer<T, U> { void accept(T t, U u); }
+    public interface BiConsumer<T, U> {
+        void accept(T t, U u);
+    }
 }

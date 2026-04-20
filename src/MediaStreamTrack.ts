@@ -1,4 +1,3 @@
-import { EventTarget, Event, defineEventAttribute } from 'event-target-shim/index';
 import { NativeModules } from 'react-native';
 
 import { MediaTrackConstraints } from './Constraints';
@@ -6,6 +5,7 @@ import { addListener, removeListener } from './EventEmitter';
 import Logger from './Logger';
 import { videoTrackDimensionChangedEventQueue } from './MediaDevices';
 import { deepClone, normalizeConstraints } from './RTCUtil';
+import { Event, EventTarget, getEventAttributeValue, setEventAttributeValue } from './vendor/event-target-shim';
 
 const log = new Logger('pc');
 const { WebRTCModule } = NativeModules;
@@ -72,6 +72,30 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
                 this._processVideoTrackDimensionChangedQueue();
             }
         }
+    }
+
+    get onended() {
+        return getEventAttributeValue(this, 'ended');
+    }
+
+    set onended(value) {
+        setEventAttributeValue(this, 'ended', value);
+    }
+
+    get onmute() {
+        return getEventAttributeValue(this, 'mute');
+    }
+
+    set onmute(value) {
+        setEventAttributeValue(this, 'mute', value);
+    }
+
+    get onunmute() {
+        return getEventAttributeValue(this, 'unmute');
+    }
+
+    set onunmute(value) {
+        setEventAttributeValue(this, 'unmute', value);
     }
 
     get enabled(): boolean {
@@ -211,7 +235,9 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
      */
     async applyConstraints(constraints?: MediaTrackConstraints): Promise<void> {
         if (this.kind !== 'video') {
-            throw new Error('Only implemented for video tracks');
+            log.info(`Only implemented for video tracks, ignoring applyConstraints for ${this.id}`);
+
+            return;
         }
 
         const normalized = normalizeConstraints({ video: constraints ?? true });
@@ -304,12 +330,3 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
         }
     }
 }
-
-/**
- * Define the `onxxx` event handlers.
- */
-const proto = MediaStreamTrack.prototype;
-
-defineEventAttribute(proto, 'ended');
-defineEventAttribute(proto, 'mute');
-defineEventAttribute(proto, 'unmute');

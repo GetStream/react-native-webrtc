@@ -75,6 +75,10 @@ Don't worry, there are plans to include a much more broader example with backend
 Come join our [Discourse Community](https://react-native-webrtc.discourse.group/) if you want to discuss any React Native and WebRTC related topics.  
 Everyone is welcome and every little helps.  
 
+## Picture-in-Picture (PIP)
+
+This package does not include a built-in PIP implementation. PIP support is available via [`@stream-io/video-react-native-sdk`](https://github.com/GetStream/stream-video-js).
+
 ## Related Projects
 
 Looking for extra functionality coverage?  

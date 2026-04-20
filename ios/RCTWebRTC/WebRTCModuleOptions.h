@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// `createScreenCaptureVideoTrack` when in-app mode is used.
 @property(nonatomic, weak, nullable) InAppScreenCapturer *activeInAppScreenCapturer;
 
+@property(nonatomic, assign) double defaultTrackVolume;
+
 #pragma mark - This class is a singleton
 
 + (instancetype _Nonnull)sharedInstance;

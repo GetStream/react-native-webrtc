@@ -248,8 +248,8 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
     }
 
     VideoDimensionDetector *dimensionDetector = [[VideoDimensionDetector alloc] initWith:self.reactTag
-                                                                                  trackId:trackId
-                                                                             webRTCModule:self.webRTCModule];
+                                                                                 trackId:trackId
+                                                                            webRTCModule:self.webRTCModule];
     [self.videoDimensionDetectors setObject:dimensionDetector forKey:trackId];
     [track addRenderer:dimensionDetector];
 

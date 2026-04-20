@@ -28,6 +28,11 @@ import org.webrtc.*;
 import org.webrtc.audio.AudioDeviceModule;
 import org.webrtc.audio.JavaAudioDeviceModule;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -50,6 +55,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     private final SparseArray<PeerConnectionObserver> mPeerConnectionObservers;
     final Map<String, MediaStream> localStreams;
 
+    // Store generated certificates by ID to avoid exposing private keys to JS
+    private static final Map<String, RtcCertificatePem> mCertificates = new HashMap<>();
+
     private final GetUserMediaImpl getUserMediaImpl;
     private SpeechActivityDetector speechActivityDetector;
 
@@ -69,7 +77,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
         String fieldTrials = options.fieldTrials;
 
-        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(reactContext)
+        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions
+                                                 .builder(reactContext)
+
                                                  .setFieldTrials(fieldTrials)
                                                  .setNativeLibraryLoader(new LibraryLoader())
                                                  .setInjectableLogger(injectableLogger, loggingSeverity)
@@ -82,7 +92,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         if (encoderFactory == null || decoderFactory == null) {
             // Initialize EGL context required for HW acceleration.
             EglBase.Context eglContext = EglUtils.getRootEglBaseContext();
-            encoderFactory = new SimulcastAlignedVideoEncoderFactory(eglContext, true, true, ResolutionAdjustment.MULTIPLE_OF_16);
+            encoderFactory = new SimulcastAlignedVideoEncoderFactory(
+                    eglContext, true, true, ResolutionAdjustment.MULTIPLE_OF_16);
             decoderFactory = new SelectiveVideoDecoderFactory(eglContext, false, Arrays.asList("VP9", "AV1"));
         }
 
@@ -94,6 +105,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         try {
             if (options.audioProcessingFactoryProvider != null) {
                 audioProcessingFactory = options.audioProcessingFactoryProvider.getFactory();
+            } else if (options.audioProcessingFactoryFactory != null) {
+                audioProcessingFactory = options.audioProcessingFactoryFactory.call();
             }
         } catch (Exception e) {
             // do nothing.
@@ -129,41 +142,43 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         Log.d(TAG, "invalidate()");
 
         try {
-            ThreadUtils.submitToExecutor(() -> {
-                // 1. Dispose PeerConnections (dispose() calls close() internally)
-                for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
-                    try {
-                        mPeerConnectionObservers.valueAt(i).dispose();
-                    } catch (Exception e) {
-                        Log.w(TAG, "invalidate(): error disposing PC " + mPeerConnectionObservers.keyAt(i), e);
-                    }
-                }
-                mPeerConnectionObservers.clear();
+            ThreadUtils
+                    .submitToExecutor(() -> {
+                        // 1. Dispose PeerConnections (dispose() calls close() internally)
+                        for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
+                            try {
+                                mPeerConnectionObservers.valueAt(i).dispose();
+                            } catch (Exception e) {
+                                Log.w(TAG, "invalidate(): error disposing PC " + mPeerConnectionObservers.keyAt(i), e);
+                            }
+                        }
+                        mPeerConnectionObservers.clear();
 
-                // 2. Detach tracks, then dispose streams. Tracks themselves get disposed in step 3.
-                for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
-                    try {
-                        MediaStream stream = entry.getValue();
-                        for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
-                        for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
-                        stream.dispose();
-                    } catch (Exception e) {
-                        Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
-                    }
-                }
-                localStreams.clear();
+                        // 2. Detach tracks, then dispose streams. Tracks themselves get disposed in step 3.
+                        for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+                            try {
+                                MediaStream stream = entry.getValue();
+                                for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                                for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                                stream.dispose();
+                            } catch (Exception e) {
+                                Log.w(TAG, "invalidate(): error disposing stream " + entry.getKey(), e);
+                            }
+                        }
+                        localStreams.clear();
 
-                // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
-                getUserMediaImpl.disposeAllTracks();
+                        // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
+                        getUserMediaImpl.disposeAllTracks();
 
-                // 4. Dispose factory (frees C++ factory + 3 threads)
-                if (mFactory != null) {
-                    mFactory.dispose();
-                    mFactory = null;
-                }
+                        // 4. Dispose factory (frees C++ factory + 3 threads)
+                        if (mFactory != null) {
+                            mFactory.dispose();
+                            mFactory = null;
+                        }
 
-                return null;
-            }).get();
+                        return null;
+                    })
+                    .get();
         } catch (InterruptedException | ExecutionException e) {
             Log.e(TAG, "invalidate() error", e);
         }
@@ -188,28 +203,28 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
         });
 
-        return JavaAudioDeviceModule
-                .builder(reactContext)
+        return JavaAudioDeviceModule.builder(reactContext)
                 .setUseHardwareAcousticEchoCanceler(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseHardwareNoiseSuppressor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 .setUseStereoOutput(true)
-                .setAudioBufferCallback((audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
-                    // 1. Speech activity detection on raw mic data, BEFORE any mutation.
-                    speechActivityDetector.processBuffer(audioBuffer, bytesRead);
+                .setAudioBufferCallback(
+                        (audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
+                            // 1. Speech activity detection on raw mic data, BEFORE any mutation.
+                            speechActivityDetector.processBuffer(audioBuffer, bytesRead);
 
-                    // 2. Existing screen-audio mixing — mutates audioBuffer in place.
-                    if (bytesRead > 0) {
-                        WebRTCModuleOptions.ScreenAudioBytesProvider provider =
-                                WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
-                        if (provider != null) {
-                            java.nio.ByteBuffer screenBuffer = provider.getScreenAudioBytes(bytesRead);
-                            if (screenBuffer != null && screenBuffer.remaining() > 0) {
-                                mixScreenAudioIntoBuffer(audioBuffer, screenBuffer, bytesRead);
+                            // 2. Existing screen-audio mixing — mutates audioBuffer in place.
+                            if (bytesRead > 0) {
+                                WebRTCModuleOptions.ScreenAudioBytesProvider provider =
+                                        WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
+                                if (provider != null) {
+                                    java.nio.ByteBuffer screenBuffer = provider.getScreenAudioBytes(bytesRead);
+                                    if (screenBuffer != null && screenBuffer.remaining() > 0) {
+                                        mixScreenAudioIntoBuffer(audioBuffer, screenBuffer, bytesRead);
+                                    }
+                                }
                             }
-                        }
-                    }
-                    return captureTimeNs;
-                })
+                            return captureTimeNs;
+                        })
                 .setAudioRecordStateCallback(new JavaAudioDeviceModule.AudioRecordStateCallback() {
                     @Override
                     public void onWebRtcAudioRecordStart() {
@@ -230,9 +245,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
      * within its own bounds. When one buffer is shorter, the other's samples pass
      * through unmodified (mic samples stay as-is, or screen-only samples are written).
      */
-    private static void mixScreenAudioIntoBuffer(java.nio.ByteBuffer micBuffer,
-                                                  java.nio.ByteBuffer screenBuffer,
-                                                  int bytesRead) {
+    private static void mixScreenAudioIntoBuffer(
+            java.nio.ByteBuffer micBuffer, java.nio.ByteBuffer screenBuffer, int bytesRead) {
         micBuffer.position(0);
         screenBuffer.position(0);
 
@@ -419,7 +433,24 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         }
 
         // FIXME: peerIdentity of type DOMString (public api)
-        // FIXME: certificates of type sequence<RTCCertificate> (public api)
+
+        // certificates (public api)
+        if (map.hasKey("certificates") && map.getType("certificates") == ReadableType.Array) {
+            ReadableArray certificates = map.getArray("certificates");
+            if (certificates.size() > 0) {
+                ReadableMap certMap = certificates.getMap(0);
+                if (certMap.hasKey("certificateId")) {
+                    String certId = certMap.getString("certificateId");
+                    RtcCertificatePem cert;
+                    synchronized (mCertificates) {
+                        cert = mCertificates.get(certId);
+                    }
+                    if (cert != null) {
+                        conf.certificate = cert;
+                    }
+                }
+            }
+        }
 
         // iceCandidatePoolSize of type unsigned short, defaulting to 0
         if (map.hasKey("iceCandidatePoolSize") && map.getType("iceCandidatePoolSize") == ReadableType.Number) {
@@ -560,33 +591,23 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         }
     }
 
+    // Must be called in the executor.
     public MediaStream getStreamForReactTag(String streamReactTag) {
-        // This function _only_ gets called from WebRTCView, in the UI thread.
-        // Hence make sure we run this code in the executor or we run at the risk
-        // of being out of sync.
-        try {
-            return (MediaStream) ThreadUtils
-                    .submitToExecutor((Callable<Object>) () -> {
-                        MediaStream stream = localStreams.get(streamReactTag);
+        MediaStream stream = localStreams.get(streamReactTag);
 
-                        if (stream != null) {
-                            return stream;
-                        }
-
-                        for (int i = 0, size = mPeerConnectionObservers.size(); i < size; i++) {
-                            PeerConnectionObserver pco = mPeerConnectionObservers.valueAt(i);
-                            stream = pco.remoteStreams.get(streamReactTag);
-                            if (stream != null) {
-                                return stream;
-                            }
-                        }
-
-                        return null;
-                    })
-                    .get();
-        } catch (ExecutionException | InterruptedException e) {
-            return null;
+        if (stream != null) {
+            return stream;
         }
+
+        for (int i = 0, size = mPeerConnectionObservers.size(); i < size; i++) {
+            PeerConnectionObserver pco = mPeerConnectionObservers.valueAt(i);
+            stream = pco.remoteStreams.get(streamReactTag);
+            if (stream != null) {
+                return stream;
+            }
+        }
+
+        return null;
     }
 
     public MediaStreamTrack getTrack(int pcId, String trackId) {
@@ -609,6 +630,15 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     public VideoTrack createVideoTrack(AbstractVideoCaptureController videoCaptureController) {
         return getUserMediaImpl.createVideoTrack(videoCaptureController);
+    }
+
+    public void registerTrack(AudioTrack track, AudioSource source) {
+        getUserMediaImpl.registerTrack(track, source);
+    }
+
+    public void registerTrack(VideoTrack track, VideoSource source, AbstractVideoCaptureController controller,
+            SurfaceTextureHelper surfaceTextureHelper) {
+        getUserMediaImpl.registerTrack(track, source, controller, surfaceTextureHelper);
     }
 
     public void createStream(
@@ -660,8 +690,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             MediaStreamTrack track = getLocalTrack(trackId);
                             transceiver = pco.addTransceiver(
                                     track, SerializeUtils.parseTransceiverOptions(options.getMap("init")));
-                            
-                            // Add mute detection for local video tracks (dimension detection is handled at track creation)
+
+                            // Add mute detection for local video tracks (dimension detection is handled at track
+                            // creation)
                             if (track instanceof VideoTrack) {
                                 pco.videoTrackAdapters.addAdapter((VideoTrack) track);
                             }
@@ -717,7 +748,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             }
                         }
                         RtpSender sender = pco.getPeerConnection().addTrack(track, streamIds);
-                        
+
                         // Add mute detection for local video tracks (dimension detection is handled at track creation)
                         if (track instanceof VideoTrack) {
                             pco.videoTrackAdapters.addAdapter((VideoTrack) track);
@@ -951,8 +982,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void getDisplayMedia(Promise promise) {
-        ThreadUtils.runOnExecutor(() -> getUserMediaImpl.getDisplayMedia(promise));
+    public void getDisplayMedia(ReadableMap constraints, Promise promise) {
+        ThreadUtils.runOnExecutor(() -> getUserMediaImpl.getDisplayMedia(constraints, promise));
     }
 
     @ReactMethod
@@ -1142,12 +1173,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         return transceiverUpdates;
     }
 
-
     @ReactMethod
     public void mediaStreamTrackSetVideoEffects(String id, ReadableArray names) {
-        ThreadUtils.runOnExecutor(() -> {
-            getUserMediaImpl.setVideoEffects(id, names);
-        });
+        ThreadUtils.runOnExecutor(() -> { getUserMediaImpl.setVideoEffects(id, names); });
     }
 
     @ReactMethod
@@ -1483,10 +1511,13 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 return;
             }
 
-            IceCandidate candidate = new IceCandidate(
-                candidateMap.hasKey("sdpMid") && !candidateMap.isNull("sdpMid") ? candidateMap.getString("sdpMid")  : "",
-                candidateMap.hasKey("sdpMLineIndex") && !candidateMap.isNull("sdpMLineIndex")  ? candidateMap.getInt("sdpMLineIndex") : 0,
-                candidateMap.getString("candidate"));
+            IceCandidate candidate = new IceCandidate(candidateMap.hasKey("sdpMid") && !candidateMap.isNull("sdpMid")
+                            ? candidateMap.getString("sdpMid")
+                            : "",
+                    candidateMap.hasKey("sdpMLineIndex") && !candidateMap.isNull("sdpMLineIndex")
+                            ? candidateMap.getInt("sdpMLineIndex")
+                            : 0,
+                    candidateMap.getString("candidate"));
 
             peerConnection.addIceCandidate(candidate, new AddIceObserver() {
                 @Override
@@ -1618,6 +1649,177 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
             pco.dataChannelSend(reactTag, data, type);
         });
+    }
+
+    // Frame Cryptor methods
+    ////////////////////////////////
+    RTCCryptoManager frameCryptor = new RTCCryptoManager(this);
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public String frameCryptorFactoryCreateFrameCryptor(ReadableMap config) {
+        return frameCryptor.frameCryptorFactoryCreateFrameCryptor(config);
+    }
+
+    @ReactMethod
+    public void frameCryptorSetKeyIndex(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorSetKeyIndex(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorGetKeyIndex(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorGetKeyIndex(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorSetEnabled(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorSetEnabled(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorGetEnabled(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorGetEnabled(config, promise);
+    }
+
+    @ReactMethod
+    public void frameCryptorDispose(ReadableMap config, Promise promise) {
+        frameCryptor.frameCryptorDispose(config, promise);
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public String frameCryptorFactoryCreateKeyProvider(ReadableMap config) {
+        return frameCryptor.frameCryptorFactoryCreateKeyProvider(config);
+    }
+
+    @ReactMethod
+    public void keyProviderSetSharedKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderSetSharedKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderRatchetSharedKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderRatchetSharedKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderExportSharedKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderExportSharedKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderSetKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderSetKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderRatchetKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderRatchetKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderExportKey(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderExportKey(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderSetSifTrailer(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderSetSifTrailer(config, promise);
+    }
+
+    @ReactMethod
+    public void keyProviderDispose(ReadableMap config, Promise promise) {
+        frameCryptor.keyProviderDispose(config, promise);
+    }
+
+    @ReactMethod
+    public void generateCertificate(ReadableMap options, Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            try {
+                PeerConnection.KeyType keyType = PeerConnection.KeyType.ECDSA;
+                long expires = 2592000L; // Default 30 days
+
+                if (options.hasKey("keyType")) {
+                    String keyTypeStr = options.getString("keyType");
+                    if ("RSA".equals(keyTypeStr)) {
+                        keyType = PeerConnection.KeyType.RSA;
+                    } else if ("ECDSA".equals(keyTypeStr)) {
+                        keyType = PeerConnection.KeyType.ECDSA;
+                    }
+                }
+
+                if (options.hasKey("expires")) {
+                    expires = (long) options.getDouble("expires");
+                }
+
+                RtcCertificatePem cert = RtcCertificatePem.generateCertificate(keyType, expires);
+                String certId = java.util.UUID.randomUUID().toString();
+                synchronized (mCertificates) {
+                    mCertificates.put(certId, cert);
+                }
+
+                WritableMap params = Arguments.createMap();
+                params.putString("certificateId", certId);
+                // Return expires as millis since epoch
+                params.putDouble("expires", System.currentTimeMillis() + expires * 1000);
+
+                // Calculate fingerprints
+                WritableArray fingerprints = Arguments.createArray();
+
+                try {
+                    CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                    ByteArrayInputStream is =
+                            new ByteArrayInputStream(cert.certificate.getBytes(StandardCharsets.UTF_8));
+                    X509Certificate x509Cert = (X509Certificate) cf.generateCertificate(is);
+
+                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                    byte[] hash = digest.digest(x509Cert.getEncoded());
+
+                    WritableMap fingerprint = Arguments.createMap();
+                    fingerprint.putString("algorithm", "sha-256");
+                    fingerprint.putString("value", bytesToHex(hash));
+                    fingerprints.pushMap(fingerprint);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to calculate fingerprint: " + e.getMessage());
+                }
+
+                params.putArray("fingerprints", fingerprints);
+
+                promise.resolve(params);
+            } catch (Exception e) {
+                promise.reject(e);
+            }
+        });
+    }
+
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+            sb.append(":");
+        }
+        if (sb.length() > 0) {
+            sb.setLength(sb.length() - 1);
+        }
+        return sb.toString();
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorFactoryCreateDataPacketCryptor(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorFactoryCreateDataPacketCryptor(params, result);
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorEncrypt(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorEncrypt(params, result);
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorDecrypt(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorDecrypt(params, result);
+    }
+
+    @ReactMethod
+    public void dataPacketCryptorDispose(ReadableMap params, @NonNull Promise result) {
+        frameCryptor.dataPacketCryptorDispose(params, result);
     }
 
     @ReactMethod
