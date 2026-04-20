@@ -43,6 +43,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     final Map<String, MediaStream> remoteStreams; // React tag -> MediaStream
     final Map<String, MediaStreamTrack> remoteTracks;
     final VideoTrackAdapter videoTrackAdapters;
+    final AudioTrackAdapter audioTrackAdapters;
     private final WebRTCModule webRTCModule;
 
     PeerConnectionObserver(WebRTCModule webRTCModule, int id) {
@@ -53,6 +54,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         this.remoteStreams = new HashMap<>();
         this.remoteTracks = new HashMap<>();
         this.videoTrackAdapters = new VideoTrackAdapter(webRTCModule, id);
+        this.audioTrackAdapters = new AudioTrackAdapter(webRTCModule, id);
     }
 
     PeerConnection getPeerConnection() {
@@ -72,11 +74,13 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     void dispose() {
         Log.d(TAG, "PeerConnection.dispose() for " + id);
 
-        // Remove video track adapters
+        // Remove track adapters for remote tracks
         for (MediaStreamTrack track : this.remoteTracks.values()) {
             if (track instanceof VideoTrack) {
                 videoTrackAdapters.removeAdapter((VideoTrack) track);
                 videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
+            } else if (track instanceof AudioTrack) {
+                audioTrackAdapters.removeAdapter((AudioTrack) track);
             }
         }
 
@@ -463,6 +467,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
                     videoTrackAdapters.addAdapter((VideoTrack) track);
                     videoTrackAdapters.addDimensionDetector((VideoTrack) track);
                 } else if (track.kind().equals(MediaStreamTrack.AUDIO_TRACK_KIND)) {
+                    audioTrackAdapters.addAdapter((AudioTrack) track);
                     ((AudioTrack) track).setVolume(WebRTCModuleOptions.getInstance().defaultTrackVolume);
                 }
                 remoteTracks.put(track.id(), track);
