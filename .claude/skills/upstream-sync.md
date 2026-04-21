@@ -139,3 +139,7 @@ Post-sync: `grep -r "org.webrtc:google-webrtc\|webrtc-ios" --include="*.gradle" 
 7. **Upstream podspec/build files leak into cherry-picks.** Other forks have their own podspec (e.g., `livekit-react-native-webrtc.podspec`). Always `git rm` them when they appear.
 
 8. **Cross-check cherry-picks against all upstreams for reverts.** Before cherry-picking a commit from one upstream, search the other upstreams for the same change — it may have been tried and reverted. Run: `git log --all --oneline -S "<key code snippet>"` to find if the same change exists elsewhere in history with a subsequent revert.
+
+9. **Verify cherry-picked changes still exist on upstream HEAD.** A commit could have been added and later reverted/modified by a subsequent commit on the same upstream. After cherry-picking, verify the actual code still matches upstream's current state: `git show <remote>/master:<file> | grep "<key code>"`. Don't just trust that a commit was made — it may have been undone.
+
+10. **Squash-merging the sync PR destroys the merge-base advancement.** The merge commits from Phase 5 (`git merge <remote>/master`) are the only thing that tells git "we've seen up to this point." Squash-merge flattens them into a single commit, losing that information. When merging the sync PR, use **"Create a merge commit"** (regular merge), not squash. If already squashed, create a follow-up PR with ghost merges: `git merge -s ours <remote>/master` for each upstream, then merge that PR with a regular merge commit.
