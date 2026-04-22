@@ -1033,6 +1033,24 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
 - (void)peerConnection:(RTC_OBJC_TYPE(RTCPeerConnection) *)peerConnection
      didRemoveReceiver:(RTC_OBJC_TYPE(RTCRtpReceiver) *)rtpReceiver {
     dispatch_async(self.workerQueue, ^{
+        // Tear down track adapters so a subsequent didAddReceiver with the
+        // same trackId (SFU participant rejoin) creates a fresh adapter on
+        // the new RTCMediaStreamTrack object. Without this, the old renderer
+        // stays bound to a dead track, no first-frame/buffer fires on the
+        // new track, and JS track.muted (set true by onRemoveTrack) never
+        // flips back to false.
+        RTCMediaStreamTrack *track = rtpReceiver.track;
+        if (track) {
+            NSString *trackId = track.trackId;
+            if (track.kind == kRTCMediaStreamTrackKindVideo) {
+                [peerConnection removeVideoTrackAdapter:(RTCVideoTrack *)track];
+                [peerConnection removeVideoDimensionDetector:(RTCVideoTrack *)track];
+            } else if (track.kind == kRTCMediaStreamTrackKindAudio) {
+                [peerConnection removeAudioTrackAdapter:(RTCAudioTrack *)track];
+            }
+            [peerConnection.remoteTracks removeObjectForKey:trackId];
+        }
+
         NSMutableDictionary *params = [NSMutableDictionary new];
 
         params[@"pcId"] = peerConnection.reactTag;

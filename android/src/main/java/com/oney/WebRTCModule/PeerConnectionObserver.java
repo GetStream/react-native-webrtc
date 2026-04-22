@@ -516,6 +516,24 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     @Override
     public void onRemoveTrack(RtpReceiver receiver) {
         ThreadUtils.runOnExecutor(() -> {
+            // Tear down track adapters so a subsequent onAddTrack with the
+            // same trackId (SFU participant rejoin) creates a fresh adapter
+            // on the new MediaStreamTrack object. Without this, the old sink
+            // stays bound to a dead track, no first-frame/data fires on the
+            // new track, and JS track.muted (set true by onRemoveTrack) never
+            // flips back to false.
+            MediaStreamTrack track = receiver.track();
+            if (track != null) {
+                String trackId = track.id();
+                if (track instanceof VideoTrack) {
+                    videoTrackAdapters.removeAdapter((VideoTrack) track);
+                    videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
+                } else if (track instanceof AudioTrack) {
+                    audioTrackAdapters.removeAdapter((AudioTrack) track);
+                }
+                remoteTracks.remove(trackId);
+            }
+
             WritableMap params = Arguments.createMap();
             params.putInt("pcId", this.id);
             params.putString("receiverId", receiver.id());

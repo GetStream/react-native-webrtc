@@ -701,6 +701,10 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
 
         WebRTCModule.peerConnectionClose(this._pcId);
 
+        // Release any orphan pending-mute entries (native fired for a
+        // trackId that JS never constructed)
+        this._pendingMuteStates.clear();
+
         // Mark transceivers as stopped.
         this._transceivers.forEach(({ transceiver })=> {
             transceiver._setStopped();
