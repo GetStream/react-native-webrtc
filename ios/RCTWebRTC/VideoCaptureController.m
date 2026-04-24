@@ -161,6 +161,32 @@
 - (void)applyConstraints:(NSDictionary *)constraints error:(NSError **)outError {
     BOOL hasChanged = NO;
 
+    // Re-read device-selecting constraints so `MediaStreamTrack._switchCamera()`
+    // can flip the camera via `applyConstraints({facingMode})` — the documented
+    // W3C pattern that browsers also implement.
+    NSString *deviceId = constraints[@"deviceId"];
+    id facingMode = constraints[@"facingMode"];
+
+    BOOL targetFront = self.usingFrontCamera;
+    if ([facingMode isKindOfClass:[NSString class]]) {
+        if ([facingMode isEqualToString:@"environment"]) {
+            targetFront = NO;
+        } else if ([facingMode isEqualToString:@"user"]) {
+            targetFront = YES;
+        }
+    }
+    if (targetFront != self.usingFrontCamera) {
+        self.usingFrontCamera = targetFront;
+        // Clear deviceId so `startCapture` re-resolves it from the new position.
+        self.deviceId = nil;
+        hasChanged = YES;
+    }
+
+    if (deviceId && ![deviceId isEqualToString:self.deviceId]) {
+        self.deviceId = deviceId;
+        hasChanged = YES;
+    }
+
     int width = [constraints[@"width"] intValue];
     int height = [constraints[@"height"] intValue];
     int frameRate = [constraints[@"frameRate"] intValue];

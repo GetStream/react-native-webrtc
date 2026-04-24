@@ -16,4 +16,10 @@ public interface VideoFrameProcessor {
      * @return processed videoframe which will rendered
      */
     public VideoFrame process(VideoFrame frame, SurfaceTextureHelper textureHelper);
+
+    /**
+     * Called once when this processor leaves the pipeline. Release any native or
+     * GL resources here. Runs on the capturer handler. Default no-op.
+     */
+    default void dispose() {}
 }
