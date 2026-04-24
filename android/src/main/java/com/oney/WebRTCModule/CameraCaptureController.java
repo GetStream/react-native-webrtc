@@ -119,9 +119,11 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         // Find target camera to switch to.
         String[] deviceNames = cameraEnumerator.getDeviceNames();
 
-        // Use the initial deviceId/facingMode. It is a constraint violation to change these through applyConstraints.
-        final String deviceId = constraintDeviceId;
-        final String facingMode = constraintFacingMode;
+        // Re-read from the incoming constraints so `MediaStreamTrack._switchCamera()`
+        // can flip the camera via `applyConstraints({facingMode})` — the documented
+        // W3C pattern that browsers also implement.
+        final String deviceId = ReactBridgeUtil.getMapStrValue(constraints, "deviceId");
+        final String facingMode = ReactBridgeUtil.getMapStrValue(constraints, "facingMode");
         int cameraIndex = -1;
         String cameraName = null;
 
