@@ -30,9 +30,8 @@ public class VideoEffectProcessor implements VideoProcessor {
 
     /**
      * Disposes each wrapped processor. Posted to the capturer handler so it runs
-     * after any in-flight {@link #onFrameCaptured}, letting implementations release
-     * GL resources inline. Idempotent. Called by the owner — not wired to
-     * {@link #onCapturerStopped}, which also fires on pauses.
+     * after any in-flight frame, so implementations can clean up GL state inline.
+     * Idempotent. Not wired to {@link #onCapturerStopped} because that also fires on pause.
      */
     public void dispose() {
         textureHelper.getHandler().post(() -> {
