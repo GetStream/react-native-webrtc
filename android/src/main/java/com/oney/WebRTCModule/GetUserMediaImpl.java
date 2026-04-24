@@ -584,6 +584,11 @@ public class GetUserMediaImpl {
             VideoSource videoSource = (VideoSource) track.mediaSource;
             SurfaceTextureHelper surfaceTextureHelper = track.surfaceTextureHelper;
 
+            // Swap first, dispose last — otherwise a frame in flight could hit a freed
+            // processor. onCapturerStopped can't replace this; it also fires on pauses.
+            VideoEffectProcessor previousProcessor = track.videoEffectProcessor;
+            track.videoEffectProcessor = null;
+
             if (names != null) {
                 List<VideoFrameProcessor> processors =
                         names.toArrayList()
@@ -602,9 +607,14 @@ public class GetUserMediaImpl {
 
                 VideoEffectProcessor videoEffectProcessor = new VideoEffectProcessor(processors, surfaceTextureHelper);
                 videoSource.setVideoProcessor(videoEffectProcessor);
+                track.videoEffectProcessor = videoEffectProcessor;
 
             } else {
                 videoSource.setVideoProcessor(null);
+            }
+
+            if (previousProcessor != null) {
+                previousProcessor.dispose();
             }
         }
     }
@@ -642,6 +652,9 @@ public class GetUserMediaImpl {
          * The {@code VideoTrackAdapter} for dimension detection if {@link #track} is a {@link VideoTrack}.
          */
         public final VideoTrackAdapter videoTrackAdapter;
+
+        /** Current effect processor, disposed on filter switch and on track teardown. */
+        public VideoEffectProcessor videoEffectProcessor;
 
         /**
          * Whether this object has been disposed or not.
@@ -691,6 +704,13 @@ public class GetUserMediaImpl {
                     if (videoCaptureController.stopCapture()) {
                         videoCaptureController.dispose();
                     }
+                }
+
+                // After stopCapture so no frame can still reach it; before
+                // surfaceTextureHelper dispose so GL is still alive for cleanup.
+                if (!isClone && videoEffectProcessor != null) {
+                    videoEffectProcessor.dispose();
+                    videoEffectProcessor = null;
                 }
 
                 // Clean up VideoTrackAdapter for video tracks (each TrackPrivate, incl. clones, has its own)
