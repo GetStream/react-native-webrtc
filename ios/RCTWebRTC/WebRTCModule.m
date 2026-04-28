@@ -111,7 +111,7 @@
                                                           audioProcessingModule:nil];
         }
         
-        _peerConnectionFactory.frameBufferPolicy = RTCFrameBufferPolicyConvertWithPoolToNV12;
+        _peerConnectionFactory.frameBufferPolicy = RTCFrameBufferPolicyCopyToNV12;
 
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
         _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
