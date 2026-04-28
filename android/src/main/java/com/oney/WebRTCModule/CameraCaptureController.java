@@ -119,9 +119,8 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         // Find target camera to switch to.
         String[] deviceNames = cameraEnumerator.getDeviceNames();
 
-        // Re-read from the incoming constraints so `MediaStreamTrack._switchCamera()`
-        // can flip the camera via `applyConstraints({facingMode})` — the documented
-        // W3C pattern that browsers also implement.
+        // Re-read the incoming constraints so MediaStreamTrack._switchCamera() can
+        // flip the camera via applyConstraints({facingMode}) — the W3C pattern browsers use.
         final String deviceId = ReactBridgeUtil.getMapStrValue(constraints, "deviceId");
         final String facingMode = ReactBridgeUtil.getMapStrValue(constraints, "facingMode");
         int cameraIndex = -1;

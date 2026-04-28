@@ -161,9 +161,8 @@
 - (void)applyConstraints:(NSDictionary *)constraints error:(NSError **)outError {
     BOOL hasChanged = NO;
 
-    // Re-read device-selecting constraints so `MediaStreamTrack._switchCamera()`
-    // can flip the camera via `applyConstraints({facingMode})` — the documented
-    // W3C pattern that browsers also implement.
+    // Re-read device-selecting constraints so MediaStreamTrack._switchCamera() can
+    // flip the camera via applyConstraints({facingMode}) — the W3C pattern browsers use.
     NSString *deviceId = constraints[@"deviceId"];
     id facingMode = constraints[@"facingMode"];
 
