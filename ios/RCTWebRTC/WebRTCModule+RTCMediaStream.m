@@ -7,27 +7,35 @@
 #import <WebRTC/WebRTC.h>
 
 #import "RTCMediaStreamTrack+React.h"
-#import "WebRTCModuleOptions.h"
 #import "WebRTCModule+RTCMediaStream.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule+VideoTrackAdapter.h"
+#import "WebRTCModuleOptions.h"
 
+#import "InAppScreenCaptureController.h"
+#import "InAppScreenCapturer.h"
 #import "ProcessorProvider.h"
 #import "ScreenCaptureController.h"
 #import "ScreenCapturer.h"
 #import "TrackCapturerEventsEmitter.h"
+
+// Import Swift-generated header for ScreenShareAudioMixer
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
 #import "VideoCaptureController.h"
 
 @implementation WebRTCModule (RTCMediaStream)
 
-- (VideoEffectProcessor *)videoEffectProcessor
-{
-  return objc_getAssociatedObject(self, _cmd);
+- (VideoEffectProcessor *)videoEffectProcessor {
+    return objc_getAssociatedObject(self, _cmd);
 }
 
-- (void)setVideoEffectProcessor:(VideoEffectProcessor *)videoEffectProcessor
-{
-  objc_setAssociatedObject(self, @selector(videoEffectProcessor), videoEffectProcessor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+- (void)setVideoEffectProcessor:(VideoEffectProcessor *)videoEffectProcessor {
+    objc_setAssociatedObject(
+        self, @selector(videoEffectProcessor), videoEffectProcessor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 #pragma mark - Default Media Constraints
@@ -39,13 +47,13 @@
  */
 + (NSDictionary *)commonOptionalConstraints {
     return @{
-        @"DtlsSrtpKeyAgreement": kRTCMediaConstraintsValueTrue,
-        @"googAutoGainControl": kRTCMediaConstraintsValueTrue,
-        @"googNoiseSuppression": kRTCMediaConstraintsValueTrue,
-        @"googEchoCancellation": kRTCMediaConstraintsValueTrue,
-        @"googHighpassFilter": kRTCMediaConstraintsValueTrue,
-        @"googTypingNoiseDetection": kRTCMediaConstraintsValueTrue,
-        @"googAudioMirroring": kRTCMediaConstraintsValueFalse
+        @"DtlsSrtpKeyAgreement" : kRTCMediaConstraintsValueTrue,
+        @"googAutoGainControl" : kRTCMediaConstraintsValueTrue,
+        @"googNoiseSuppression" : kRTCMediaConstraintsValueTrue,
+        @"googEchoCancellation" : kRTCMediaConstraintsValueTrue,
+        @"googHighpassFilter" : kRTCMediaConstraintsValueTrue,
+        @"googTypingNoiseDetection" : kRTCMediaConstraintsValueTrue,
+        @"googAudioMirroring" : kRTCMediaConstraintsValueFalse
     };
 }
 
@@ -145,8 +153,8 @@
             }
         } else if ([track.kind isEqualToString:@"audio"]) {
             settings = @{
-                @"deviceId": @"audio",
-                @"groupId": @"",
+                @"deviceId" : @"audio",
+                @"groupId" : @"",
             };
         }
 
@@ -176,14 +184,22 @@
     NSString *trackUUID = [[NSUUID UUID] UUIDString];
     RTCVideoTrack *videoTrack = [self.peerConnectionFactory videoTrackWithSource:videoSource trackId:trackUUID];
 
-#if !TARGET_IPHONE_SIMULATOR
-    RTCCameraVideoCapturer *videoCapturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:videoSource];
-    VideoCaptureController *videoCaptureController =
-        [[VideoCaptureController alloc] initWithCapturer:videoCapturer andConstraints:constraints[@"video"]];
-    videoCaptureController.enableMultitaskingCameraAccess = [WebRTCModuleOptions sharedInstance].enableMultitaskingCameraAccess;
-    videoTrack.captureController = videoCaptureController;
-    [videoCaptureController startCapture];
+    BOOL hasRuntimeVideoDevice = YES;
+#if TARGET_IPHONE_SIMULATOR
+    // On simulator, a runtime-provided video source may exist (e.g. virtual camera),
+    // so only skip camera capture setup when no runtime video device is available.
+    hasRuntimeVideoDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo] != nil;
 #endif
+
+    if (hasRuntimeVideoDevice) {
+        RTCCameraVideoCapturer *videoCapturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:videoSource];
+        VideoCaptureController *videoCaptureController =
+            [[VideoCaptureController alloc] initWithCapturer:videoCapturer andConstraints:constraints[@"video"]];
+        videoCaptureController.enableMultitaskingCameraAccess =
+            [WebRTCModuleOptions sharedInstance].enableMultitaskingCameraAccess;
+        videoTrack.captureController = videoCaptureController;
+        [videoCaptureController startCapture];
+    }
 
     // Add dimension detection for local video tracks immediately
     [self addLocalVideoTrackDimensionDetection:videoTrack];
@@ -202,14 +218,32 @@
     NSString *trackUUID = [[NSUUID UUID] UUIDString];
     RTCVideoTrack *videoTrack = [self.peerConnectionFactory videoTrackWithSource:videoSource trackId:trackUUID];
 
-    ScreenCapturer *screenCapturer = [[ScreenCapturer alloc] initWithDelegate:videoSource];
-    ScreenCaptureController *screenCaptureController =
-        [[ScreenCaptureController alloc] initWithCapturer:screenCapturer];
+    WebRTCModuleOptions *options = [WebRTCModuleOptions sharedInstance];
+    CaptureController *captureController;
+
+    if (options.useInAppScreenCapture) {
+        // Clear the flag so subsequent getDisplayMedia calls use broadcast by default
+        options.useInAppScreenCapture = NO;
+
+        InAppScreenCapturer *capturer = [[InAppScreenCapturer alloc] initWithDelegate:videoSource];
+        InAppScreenCaptureController *controller = [[InAppScreenCaptureController alloc] initWithCapturer:capturer];
+
+        // Store weak reference for audio mixing wiring
+        options.activeInAppScreenCapturer = capturer;
+
+        captureController = controller;
+    } else {
+        // Existing broadcast extension path
+        ScreenCapturer *screenCapturer = [[ScreenCapturer alloc] initWithDelegate:videoSource];
+        ScreenCaptureController *screenCaptureController =
+            [[ScreenCaptureController alloc] initWithCapturer:screenCapturer];
+        captureController = screenCaptureController;
+    }
 
     TrackCapturerEventsEmitter *emitter = [[TrackCapturerEventsEmitter alloc] initWith:trackUUID webRTCModule:self];
-    screenCaptureController.eventsDelegate = emitter;
-    videoTrack.captureController = screenCaptureController;
-    [screenCaptureController startCapture];
+    captureController.eventsDelegate = emitter;
+    videoTrack.captureController = captureController;
+    [captureController startCapture];
 
     // Add dimension detection for local video tracks immediately
     [self addLocalVideoTrackDimensionDetection:videoTrack];
@@ -217,7 +251,10 @@
     return videoTrack;
 }
 
-RCT_EXPORT_METHOD(getDisplayMedia : (RCTPromiseResolveBlock)resolve rejecter : (RCTPromiseRejectBlock)reject) {
+RCT_EXPORT_METHOD(getDisplayMedia
+                  : (NSDictionary *)constraints resolver
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
 #if TARGET_OS_TV
     reject(@"unsupported_platform", @"tvOS is not supported", nil);
     return;
@@ -311,8 +348,8 @@ RCT_EXPORT_METHOD(getUserMedia
             }
         } else if ([track.kind isEqualToString:@"audio"]) {
             settings = @{
-                @"deviceId": @"audio",
-                @"groupId": @"",
+                @"deviceId" : @"audio",
+                @"groupId" : @"",
             };
         }
 
@@ -339,7 +376,14 @@ RCT_EXPORT_METHOD(enumerateDevices : (RCTResponseSenderBlock)callback) {
 #else
     NSMutableArray *devices = [NSMutableArray array];
     NSMutableArray *deviceTypes = [NSMutableArray array];
-    [deviceTypes addObjectsFromArray:@[ AVCaptureDeviceTypeBuiltInWideAngleCamera, AVCaptureDeviceTypeBuiltInUltraWideCamera, AVCaptureDeviceTypeBuiltInTelephotoCamera, AVCaptureDeviceTypeBuiltInDualCamera, AVCaptureDeviceTypeBuiltInDualWideCamera, AVCaptureDeviceTypeBuiltInTripleCamera]];
+    [deviceTypes addObjectsFromArray:@[
+        AVCaptureDeviceTypeBuiltInWideAngleCamera,
+        AVCaptureDeviceTypeBuiltInUltraWideCamera,
+        AVCaptureDeviceTypeBuiltInTelephotoCamera,
+        AVCaptureDeviceTypeBuiltInDualCamera,
+        AVCaptureDeviceTypeBuiltInDualWideCamera,
+        AVCaptureDeviceTypeBuiltInTripleCamera
+    ]];
     if (@available(macos 14.0, ios 17.0, tvos 17.0, *)) {
         [deviceTypes addObject:AVCaptureDeviceTypeExternal];
     }
@@ -361,7 +405,7 @@ RCT_EXPORT_METHOD(enumerateDevices : (RCTResponseSenderBlock)callback) {
         if (device.localizedName != nil) {
             label = device.localizedName;
         }
-        
+
         [devices addObject:@{
             @"facing" : position,
             @"deviceId" : device.uniqueID,
@@ -400,18 +444,19 @@ RCT_EXPORT_METHOD(enumerateDevices : (RCTResponseSenderBlock)callback) {
     if (!videoTrack) {
         return;
     }
-    
+
     // Create a dimension detector for this local track
-    VideoDimensionDetector *detector = [[VideoDimensionDetector alloc] initWith:@(-1) // -1 for local tracks
+    VideoDimensionDetector *detector = [[VideoDimensionDetector alloc] initWith:@(-1)  // -1 for local tracks
                                                                         trackId:videoTrack.trackId
                                                                    webRTCModule:self];
-    
+
     // Store the detector using associated objects on the track itself
-    objc_setAssociatedObject(videoTrack, @selector(addLocalVideoTrackDimensionDetection:), detector, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    
+    objc_setAssociatedObject(
+        videoTrack, @selector(addLocalVideoTrackDimensionDetection:), detector, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
     // Add the detector as a renderer to the track
     [videoTrack addRenderer:detector];
-    
+
     RCTLogTrace(@"[VideoTrackAdapter] Local dimension detector created for track %@", videoTrack.trackId);
 }
 
@@ -419,14 +464,16 @@ RCT_EXPORT_METHOD(enumerateDevices : (RCTResponseSenderBlock)callback) {
     if (!videoTrack) {
         return;
     }
-    
+
     // Get the associated detector
-    VideoDimensionDetector *detector = objc_getAssociatedObject(videoTrack, @selector(addLocalVideoTrackDimensionDetection:));
-    
+    VideoDimensionDetector *detector =
+        objc_getAssociatedObject(videoTrack, @selector(addLocalVideoTrackDimensionDetection:));
+
     if (detector) {
         [videoTrack removeRenderer:detector];
         [detector dispose];
-        objc_setAssociatedObject(videoTrack, @selector(addLocalVideoTrackDimensionDetection:), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(
+            videoTrack, @selector(addLocalVideoTrackDimensionDetection:), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         RCTLogTrace(@"[VideoTrackAdapter] Local dimension detector removed for track %@", videoTrack.trackId);
     }
 }
@@ -519,10 +566,11 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(mediaStreamTrackClone : (nonnull NSString
             RTCAudioTrack *audioTrack = [self.peerConnectionFactory audioTrackWithTrackId:trackUUID];
             audioTrack.isEnabled = originalTrack.isEnabled;
             [self.localTracks setObject:audioTrack forKey:trackUUID];
-            for (NSString* streamId in [self.localStreams allKeys]) {
-                RTCMediaStream* stream = [self.localStreams objectForKey:streamId];
-                if (stream == nil) continue;
-                for (RTCAudioTrack* track in [stream.audioTracks copy]) {
+            for (NSString *streamId in [self.localStreams allKeys]) {
+                RTCMediaStream *stream = [self.localStreams objectForKey:streamId];
+                if (stream == nil)
+                    continue;
+                for (RTCAudioTrack *track in [stream.audioTracks copy]) {
                     if ([trackID isEqualToString:track.trackId]) {
                         [stream addAudioTrack:audioTrack];
                     }
@@ -533,15 +581,16 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(mediaStreamTrackClone : (nonnull NSString
             RTCVideoSource *videoSource = originalVideoTrack.source;
             RTCVideoTrack *videoTrack = [self.peerConnectionFactory videoTrackWithSource:videoSource trackId:trackUUID];
             videoTrack.isEnabled = originalTrack.isEnabled;
-            
+
             // Add dimension detection for cloned local video tracks
             [self addLocalVideoTrackDimensionDetection:videoTrack];
-            
+
             [self.localTracks setObject:videoTrack forKey:trackUUID];
-            for (NSString* streamId in [self.localStreams allKeys]) {
-                RTCMediaStream* stream = [self.localStreams objectForKey:streamId];
-                if (stream == nil) continue;
-                for (RTCVideoTrack* track in [stream.videoTracks copy]) {
+            for (NSString *streamId in [self.localStreams allKeys]) {
+                RTCMediaStream *stream = [self.localStreams objectForKey:streamId];
+                if (stream == nil)
+                    continue;
+                for (RTCVideoTrack *track in [stream.videoTracks copy]) {
                     if ([trackID isEqualToString:track.trackId]) {
                         [stream addVideoTrack:videoTrack];
                     }
@@ -573,7 +622,11 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
 #endif
 }
 
-RCT_EXPORT_METHOD(mediaStreamTrackApplyConstraints : (nonnull NSString *)trackID : (NSDictionary *)constraints : (RCTPromiseResolveBlock)resolve : (RCTPromiseRejectBlock)reject) {
+RCT_EXPORT_METHOD(mediaStreamTrackApplyConstraints
+                  : (nonnull NSString *)trackID
+                  : (NSDictionary *)constraints
+                  : (RCTPromiseResolveBlock)resolve
+                  : (RCTPromiseRejectBlock)reject) {
 #if TARGET_OS_TV
     reject(@"unsupported_platform", @"tvOS is not supported", nil);
     return;
@@ -584,7 +637,7 @@ RCT_EXPORT_METHOD(mediaStreamTrackApplyConstraints : (nonnull NSString *)trackID
             RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
             if ([videoTrack.captureController isKindOfClass:[CaptureController class]]) {
                 CaptureController *vcc = (CaptureController *)videoTrack.captureController;
-                NSError* error = nil;
+                NSError *error = nil;
                 [vcc applyConstraints:constraints error:&error];
                 if (error) {
                     reject(@"E_INVALID", error.localizedDescription, error);
@@ -611,29 +664,30 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetVolume : (nonnull NSNumber *)pcId : (nonnul
     }
 }
 
-RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects:(nonnull NSString *)trackID names:(nonnull NSArray<NSString *> *)names)
-{
-  RTCMediaStreamTrack *track = self.localTracks[trackID];
-  if (track) {
-    RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
-    RTCVideoSource *videoSource = videoTrack.source;
-    
-    NSMutableArray *processors = [[NSMutableArray alloc] init];
-    for (NSString *name in names) {
-      NSObject<VideoFrameProcessorDelegate> *processor = [ProcessorProvider getProcessor:name];
-      if (processor != nil) {
-        [processors addObject:processor];
-      }
+RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects
+                  : (nonnull NSString *)trackID names
+                  : (nonnull NSArray<NSString *> *)names) {
+    RTCMediaStreamTrack *track = self.localTracks[trackID];
+    if (track) {
+        RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
+        RTCVideoSource *videoSource = videoTrack.source;
+
+        NSMutableArray *processors = [[NSMutableArray alloc] init];
+        for (NSString *name in names) {
+            NSObject<VideoFrameProcessorDelegate> *processor = [ProcessorProvider getProcessor:name];
+            if (processor != nil) {
+                [processors addObject:processor];
+            }
+        }
+
+        self.videoEffectProcessor = [[VideoEffectProcessor alloc] initWithProcessors:processors
+                                                                         videoSource:videoSource];
+
+        VideoCaptureController *vcc = (VideoCaptureController *)videoTrack.captureController;
+        RTCVideoCapturer *capturer = vcc.capturer;
+
+        capturer.delegate = self.videoEffectProcessor;
     }
-    
-    self.videoEffectProcessor = [[VideoEffectProcessor alloc] initWithProcessors:processors
-                                                                     videoSource:videoSource];
-    
-    VideoCaptureController *vcc = (VideoCaptureController *)videoTrack.captureController;
-    RTCVideoCapturer *capturer = vcc.capturer;
-    
-    capturer.delegate = self.videoEffectProcessor;
-  }
 }
 
 #pragma mark - Helpers
@@ -652,30 +706,29 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects:(nonnull NSString *)trackID na
 }
 
 - (void)ensureAudioSessionWithRecording {
-  RTCAudioSession* session = [RTCAudioSession sharedInstance];
+    RTCAudioSession *session = [RTCAudioSession sharedInstance];
 
-  // we also need to set default WebRTC audio configuration, since it may be activated after
-  // this method is called
-  RTCAudioSessionConfiguration* config = [RTCAudioSessionConfiguration webRTCConfiguration];
-  // require audio session to be either PlayAndRecord or MultiRoute
-  if (session.category != AVAudioSessionCategoryPlayAndRecord) {
-    [session lockForConfiguration];
-    config.category = AVAudioSessionCategoryPlayAndRecord;
-    config.categoryOptions =
-             AVAudioSessionCategoryOptionAllowBluetooth|
-             AVAudioSessionCategoryOptionDefaultToSpeaker;
-    config.mode = AVAudioSessionModeVideoChat;
-    NSError* error = nil;
-    bool success = [session setCategory:config.category withOptions:config.categoryOptions error:&error];
-    if (!success) {
-      NSLog(@"ensureAudioSessionWithRecording: setCategory failed due to: %@", [error localizedDescription]);
+    // we also need to set default WebRTC audio configuration, since it may be activated after
+    // this method is called
+    RTCAudioSessionConfiguration *config = [RTCAudioSessionConfiguration webRTCConfiguration];
+    // require audio session to be either PlayAndRecord or MultiRoute
+    if (session.category != AVAudioSessionCategoryPlayAndRecord) {
+        [session lockForConfiguration];
+        config.category = AVAudioSessionCategoryPlayAndRecord;
+        config.categoryOptions =
+            AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionDefaultToSpeaker;
+        config.mode = AVAudioSessionModeVideoChat;
+        NSError *error = nil;
+        bool success = [session setCategory:config.category withOptions:config.categoryOptions error:&error];
+        if (!success) {
+            NSLog(@"ensureAudioSessionWithRecording: setCategory failed due to: %@", [error localizedDescription]);
+        }
+        success = [session setMode:config.mode error:&error];
+        if (!success) {
+            NSLog(@"ensureAudioSessionWithRecording: Error setting category: %@", [error localizedDescription]);
+        }
+        [session unlockForConfiguration];
     }
-    success = [session setMode:config.mode error:&error];
-    if (!success) {
-      NSLog(@"ensureAudioSessionWithRecording: Error setting category: %@", [error localizedDescription]);
-    }
-    [session unlockForConfiguration];
-  }
 }
 
 @end

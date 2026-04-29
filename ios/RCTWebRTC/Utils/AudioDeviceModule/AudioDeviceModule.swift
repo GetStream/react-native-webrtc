@@ -179,6 +179,11 @@ import WebRTC
     /// Strong reference to the current engine so we can introspect it if needed.
     @objc public var engine: AVAudioEngine?
 
+    /// Screen share audio mixer. Implements `RTCAudioCustomProcessingDelegate`
+    /// and is set as `capturePostProcessingDelegate` on the
+    /// `RTCDefaultAudioProcessingModule` when screen share audio mixing starts.
+    @objc public let screenShareAudioMixer = ScreenShareAudioMixer()
+
     /// Secondary observer that receives forwarded delegate callbacks.
     /// This allows the AudioDeviceModuleObserver to receive events and forward them to JS.
     private let delegateObserver: RTCAudioDeviceModuleDelegate
@@ -228,7 +233,6 @@ import WebRTC
             .eraseToAnyPublisher()
         super.init()
 
-        _ = source.setMuteMode(.inputMixer)
         audioLevelsAdapter.subject = audioLevelSubject
         source.observer = self
     }

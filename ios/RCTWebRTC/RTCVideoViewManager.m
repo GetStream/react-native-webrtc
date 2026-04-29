@@ -136,14 +136,14 @@ typedef NS_ENUM(NSInteger, RTCVideoViewObjectFit) {
 
 #if TARGET_OS_OSX
 - (void)layout {
-  [super layout];
+    [super layout];
 #else
 - (void)layoutSubviews {
-  [super layoutSubviews];
+    [super layoutSubviews];
 #endif
 
-  CGRect bounds = self.bounds;
-  self.videoView.frame = bounds;
+    CGRect bounds = self.bounds;
+    self.videoView.frame = bounds;
 }
 
 /**

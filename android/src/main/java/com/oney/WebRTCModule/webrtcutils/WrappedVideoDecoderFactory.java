@@ -19,23 +19,25 @@ package com.oney.WebRTCModule.webrtcutils;
 import androidx.annotation.Nullable;
 
 import org.webrtc.*;
+
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 
 /**
- * A patch on top of  https://github.com/GetStream/webrtc/blob/main/sdk/android/api/org/webrtc/WrappedVideoDecoderFactory.java
- * It disables direct-to-SurfaceTextureFrame rendering for c2 exynos/qualcomm/mediatek hardware decoder
+ * A patch on top of
+ * https://github.com/GetStream/webrtc/blob/main/sdk/android/api/org/webrtc/WrappedVideoDecoderFactory.java It disables
+ * direct-to-SurfaceTextureFrame rendering for c2 exynos/qualcomm/mediatek hardware decoder
  */
 public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
     // Known hardware decoders to have failures when it outputs to a SurfaceTexture directly
     private static final String[] DECODER_DENYLIST_PREFIXES = {
-            "OMX.qcom.",
-            "OMX.hisi.",
+            "OMX.qcom.", "OMX.hisi.",
             // https://github.com/androidx/media/issues/2003
-//            "c2.exynos.",
-//            "c2.qti.",
-//            // https://github.com/androidx/media/blob/bfe5930f7f29c6492d60e3d01a90abd3c138b615/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java#L1499
-//            "c2.mtk.",
+            //            "c2.exynos.",
+            //            "c2.qti.",
+            //            //
+            //            https://github.com/androidx/media/blob/bfe5930f7f29c6492d60e3d01a90abd3c138b615/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java#L1499
+            //            "c2.mtk.",
     };
 
     private final boolean forceSWCodec;
@@ -47,7 +49,8 @@ public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
     }
 
     private final VideoDecoderFactory hardwareVideoDecoderFactory;
-    private final VideoDecoderFactory hardwareVideoDecoderFactoryWithoutEglContext = new HardwareVideoDecoderFactory(null)   ;
+    private final VideoDecoderFactory hardwareVideoDecoderFactoryWithoutEglContext =
+            new HardwareVideoDecoderFactory(null);
     private final VideoDecoderFactory softwareVideoDecoderFactory = new SoftwareVideoDecoderFactory();
     @Nullable
     private final VideoDecoderFactory platformSoftwareVideoDecoderFactory;
@@ -62,7 +65,7 @@ public class WrappedVideoDecoderFactory implements VideoDecoderFactory {
         if (softwareDecoder == null && this.platformSoftwareVideoDecoderFactory != null) {
             softwareDecoder = this.platformSoftwareVideoDecoderFactory.createDecoder(codecType);
         }
-        if(hardwareDecoder != null && disableSurfaceTextureFrame(hardwareDecoder.getImplementationName())) {
+        if (hardwareDecoder != null && disableSurfaceTextureFrame(hardwareDecoder.getImplementationName())) {
             hardwareDecoder.release();
             hardwareDecoder = this.hardwareVideoDecoderFactoryWithoutEglContext.createDecoder(codecType);
         }

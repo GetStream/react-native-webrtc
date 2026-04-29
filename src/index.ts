@@ -8,6 +8,7 @@ if (WebRTCModule === null) {
     }`);
 }
 
+import { AudioDeviceModule, AudioEngineMuteMode } from './AudioDeviceModule';
 import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
@@ -17,10 +18,18 @@ import MediaStreamTrack, { type MediaTrackSettings } from './MediaStreamTrack';
 import MediaStreamTrackEvent from './MediaStreamTrackEvent';
 import permissions from './Permissions';
 import RTCAudioSession from './RTCAudioSession';
+import RTCCertificate from './RTCCertificate';
+import RTCDataPacketCryptor, { RTCEncryptedPacket } from './RTCDataPacketCryptor';
+import RTCDataPacketCryptorFactory from './RTCDataPacketCryptorFactory';
 import RTCErrorEvent from './RTCErrorEvent';
+import RTCFrameCryptor, { RTCFrameCryptorState } from './RTCFrameCryptor';
+import RTCFrameCryptorFactory, { RTCFrameCryptorAlgorithm, RTCKeyProviderOptions } from './RTCFrameCryptorFactory';
 import RTCIceCandidate from './RTCIceCandidate';
+import RTCKeyProvider from './RTCKeyProvider';
 import RTCPeerConnection from './RTCPeerConnection';
+import RTCRtpEncodingParameters, { type RTCRtpEncodingParametersInit } from './RTCRtpEncodingParameters';
 import RTCRtpReceiver from './RTCRtpReceiver';
+import RTCRtpSendParameters, { type RTCRtpSendParametersInit } from './RTCRtpSendParameters';
 import RTCRtpSender from './RTCRtpSender';
 import RTCRtpTransceiver from './RTCRtpTransceiver';
 import RTCSessionDescription from './RTCSessionDescription';
@@ -39,19 +48,35 @@ export {
     RTCIceCandidate,
     RTCPeerConnection,
     RTCSessionDescription,
+    RTCCertificate,
     RTCView,
     ScreenCapturePickerView,
+    RTCRtpEncodingParameters,
     RTCRtpTransceiver,
     RTCRtpReceiver,
     RTCRtpSender,
+    RTCRtpSendParameters,
     RTCErrorEvent,
     RTCAudioSession,
+    RTCDataPacketCryptor,
+    RTCDataPacketCryptorFactory,
+    RTCEncryptedPacket,
+    RTCFrameCryptor,
+    RTCFrameCryptorAlgorithm,
+    RTCFrameCryptorState,
+    RTCFrameCryptorFactory,
+    RTCKeyProvider,
+    RTCKeyProviderOptions,
     MediaStream,
     MediaStreamTrack,
     type MediaTrackSettings,
+    type RTCRtpEncodingParametersInit,
+    type RTCRtpSendParametersInit,
     mediaDevices,
     permissions,
     registerGlobals,
+    AudioDeviceModule,
+    AudioEngineMuteMode,
     audioDeviceModuleEvents,
 };
 
@@ -72,6 +97,7 @@ function registerGlobals(): void {
     global.navigator.mediaDevices.enumerateDevices = mediaDevices.enumerateDevices.bind(mediaDevices);
 
     global.RTCIceCandidate = RTCIceCandidate;
+    global.RTCCertificate = RTCCertificate;
     global.RTCPeerConnection = RTCPeerConnection;
     global.RTCRtpReceiver = RTCRtpReceiver;
     global.RTCRtpSender = RTCRtpReceiver;
@@ -83,4 +109,7 @@ function registerGlobals(): void {
     global.RTCRtpReceiver = RTCRtpReceiver;
     global.RTCRtpSender = RTCRtpSender;
     global.RTCErrorEvent = RTCErrorEvent;
+
+    // Ensure audioDeviceModuleEvents is initialized and event listeners are registered
+    audioDeviceModuleEvents.setupListeners();
 }

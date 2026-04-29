@@ -1,4 +1,3 @@
-import { EventTarget, Event, defineEventAttribute } from 'event-target-shim/index';
 import { NativeModules } from 'react-native';
 
 import { addListener, removeListener } from './EventEmitter';
@@ -6,6 +5,7 @@ import Logger from './Logger';
 import MediaStream from './MediaStream';
 import MediaStreamTrack from './MediaStreamTrack';
 import MediaStreamTrackEvent from './MediaStreamTrackEvent';
+import RTCCertificate from './RTCCertificate';
 import RTCDataChannel from './RTCDataChannel';
 import RTCDataChannelEvent from './RTCDataChannelEvent';
 import RTCIceCandidate from './RTCIceCandidate';
@@ -18,6 +18,8 @@ import RTCRtpTransceiver from './RTCRtpTransceiver';
 import RTCSessionDescription, { RTCSessionDescriptionInit } from './RTCSessionDescription';
 import RTCTrackEvent from './RTCTrackEvent';
 import * as RTCUtil from './RTCUtil';
+import { RTCOfferOptions } from './RTCUtil';
+import { Event, EventTarget, getEventAttributeValue, setEventAttributeValue } from './vendor/event-target-shim';
 
 const log = new Logger('pc');
 const { WebRTCModule } = NativeModules;
@@ -54,6 +56,7 @@ type RTCIceServer = {
 
 type RTCConfiguration = {
     bundlePolicy?: 'balanced' | 'max-compat' | 'max-bundle',
+    certificates?: RTCCertificate[],
     iceCandidatePoolSize?: number,
     iceServers?: RTCIceServer[],
     iceTransportPolicy?: 'all' | 'relay',
@@ -87,6 +90,44 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
     _transceivers: { order: number, transceiver: RTCRtpTransceiver }[];
     _remoteStreams: Map<string, MediaStream>;
     _pendingTrackEvents: any[];
+    // Native mute events that arrived before the matching JS track was
+    // constructed (can happen on fast/loopback connections). Drained when the
+    // remote track is created in setRemoteDescription.
+    _pendingMuteStates: Map<string, boolean>;
+
+    static generateCertificate(
+        keygenAlgorithm: string | {
+            name: string,
+            namedCurve?: string,
+            modulusLength?: number,
+            publicExponent?: Uint8Array,
+            hash?: string
+        }
+    ): Promise<RTCCertificate> {
+        const options: { keyType?: string, expires?: number } = {};
+
+        let algorithm = keygenAlgorithm;
+
+        if (typeof algorithm === 'string') {
+            algorithm = { name: algorithm };
+        }
+
+        if (algorithm.name === 'RSASSA-PKCS1-v1_5') {
+            options.keyType = 'RSA';
+        } else if (algorithm.name === 'ECDSA') {
+            options.keyType = 'ECDSA';
+        } else {
+            // Default to ECDSA for other cases or if unspecified
+            // This behavior matches common expectations when modern defaults are preferred
+            if (algorithm.name && algorithm.name.toUpperCase().includes('RSA')) {
+                options.keyType = 'RSA';
+            } else {
+                options.keyType = 'ECDSA';
+            }
+        }
+
+        return WebRTCModule.generateCertificate(options).then(info => new RTCCertificate(info));
+    }
 
     constructor(configuration?: RTCConfiguration) {
         super();
@@ -117,6 +158,16 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
 
             // Filter out bogus servers.
             configuration.iceServers = servers.filter(s => s.urls);
+
+            // Sanitize certificates.
+            if (configuration.certificates) {
+                // @ts-ignore
+                configuration.certificates = configuration.certificates.map(cert => {
+                    return {
+                        certificateId: cert._id
+                    };
+                });
+            }
         }
 
         if (!WebRTCModule.peerConnectionInit(configuration, this._pcId)) {
@@ -126,13 +177,94 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         this._transceivers = [];
         this._remoteStreams = new Map();
         this._pendingTrackEvents = [];
+        this._pendingMuteStates = new Map();
 
         this._registerEvents();
 
         log.debug(`${this._pcId} ctor`);
     }
 
-    async createOffer(options) {
+    get onconnectionstatechange() {
+        return getEventAttributeValue(this, 'connectionstatechange');
+    }
+
+    set onconnectionstatechange(value) {
+        setEventAttributeValue(this, 'connectionstatechange', value);
+    }
+
+    get onicecandidate() {
+        return getEventAttributeValue(this, 'icecandidate');
+    }
+
+    set onicecandidate(value) {
+        setEventAttributeValue(this, 'icecandidate', value);
+    }
+
+    get onicecandidateerror() {
+        return getEventAttributeValue(this, 'icecandidateerror');
+    }
+
+    set onicecandidateerror(value) {
+        setEventAttributeValue(this, 'icecandidateerror', value);
+    }
+
+    get oniceconnectionstatechange() {
+        return getEventAttributeValue(this, 'iceconnectionstatechange');
+    }
+
+    set oniceconnectionstatechange(value) {
+        setEventAttributeValue(this, 'iceconnectionstatechange', value);
+    }
+
+    get onicegatheringstatechange() {
+        return getEventAttributeValue(this, 'icegatheringstatechange');
+    }
+
+    set onicegatheringstatechange(value) {
+        setEventAttributeValue(this, 'icegatheringstatechange', value);
+    }
+
+    get onnegotiationneeded() {
+        return getEventAttributeValue(this, 'negotiationneeded');
+    }
+
+    set onnegotiationneeded(value) {
+        setEventAttributeValue(this, 'negotiationneeded', value);
+    }
+
+    get onsignalingstatechange() {
+        return getEventAttributeValue(this, 'signalingstatechange');
+    }
+
+    set onsignalingstatechange(value) {
+        setEventAttributeValue(this, 'signalingstatechange', value);
+    }
+
+    get ondatachannel() {
+        return getEventAttributeValue(this, 'datachannel');
+    }
+
+    set ondatachannel(value) {
+        setEventAttributeValue(this, 'datachannel', value);
+    }
+
+    get ontrack() {
+        return getEventAttributeValue(this, 'track');
+    }
+
+    set ontrack(value) {
+        setEventAttributeValue(this, 'track', value);
+    }
+
+    get onerror() {
+        return getEventAttributeValue(this, 'error');
+    }
+
+    set onerror(value) {
+        setEventAttributeValue(this, 'error', value);
+    }
+
+    async createOffer(options?:RTCOfferOptions) {
         log.debug(`${this._pcId} createOffer`);
 
         const {
@@ -247,6 +379,19 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             const newSender = new RTCRtpSender({ ...transceiver.sender, track: null });
             const remoteTrack
                 = transceiver.receiver.track ? new MediaStreamTrack(transceiver.receiver.track) : null;
+
+            // Apply any mute state emitted by the native adapter before this
+            // track existed in JS. Idempotence guard in _setMutedInternal
+            // prevents a spurious event if the buffered value matches default.
+            if (remoteTrack) {
+                const pendingMuted = this._pendingMuteStates.get(remoteTrack.id);
+
+                if (pendingMuted !== undefined) {
+                    this._pendingMuteStates.delete(remoteTrack.id);
+                    remoteTrack._setMutedInternal(pendingMuted);
+                }
+            }
+
             const newReceiver = new RTCRtpReceiver({ ...transceiver.receiver, track: remoteTrack });
             const newTransceiver = new RTCRtpTransceiver({
                 ...transceiver,
@@ -317,14 +462,19 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
                 stream.dispatchEvent(new MediaStreamTrackEvent('addtrack', { track }));
             });
 
-            // Dispatch an unmute event for the track.
-            track._setMutedInternal(false);
+            // Per W3C spec, remote tracks MUST be muted in ontrack. Native
+            // adapters own the mute lifecycle: they fire unmute when the first
+            // media data arrives and mute when the stream stalls.
         }
 
         log.debug(`${this._pcId} setRemoteDescription OK`);
     }
 
     async addIceCandidate(candidate): Promise<void> {
+        if (this.connectionState === 'closed') {
+            throw new Error('Peer Connection is closed');
+        }
+
         log.debug(`${this._pcId} addIceCandidate`);
 
         if (!candidate || !candidate.candidate) {
@@ -535,13 +685,11 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
     }
 
     getSenders(): RTCRtpSender[] {
-        // @ts-ignore
-        return this._transceivers.map(e => !e.transceiver.stopped && e.transceiver.sender).filter(Boolean);
+        return this._transceivers.filter(e => !e.transceiver.stopped).map(e => e.transceiver.sender);
     }
 
     getReceivers(): RTCRtpReceiver[] {
-        // @ts-ignore
-        return this._transceivers.map(e => !e.transceiver.stopped && e.transceiver.receiver).filter(Boolean);
+        return this._transceivers.filter(e => !e.transceiver.stopped).map(e => e.transceiver.receiver);
     }
 
     close(): void {
@@ -552,6 +700,10 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         }
 
         WebRTCModule.peerConnectionClose(this._pcId);
+
+        // Release any orphan pending-mute entries (native fired for a
+        // trackId that JS never constructed)
+        this._pendingMuteStates.clear();
 
         // Mark transceivers as stopped.
         this._transceivers.forEach(({ transceiver })=> {
@@ -723,6 +875,11 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
 
             if (track) {
                 track._setMutedInternal(ev.muted);
+            } else {
+                // Track not yet constructed in JS (native fired before
+                // setRemoteDescription finished). Buffer the latest state;
+                // it will be applied when the track is created.
+                this._pendingMuteStates.set(ev.trackId, ev.muted);
             }
         });
 
@@ -831,19 +988,3 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         this._transceivers.sort((a, b) => a.order - b.order);
     }
 }
-
-/**
- * Define the `onxxx` event handlers.
- */
-const proto = RTCPeerConnection.prototype;
-
-defineEventAttribute(proto, 'connectionstatechange');
-defineEventAttribute(proto, 'icecandidate');
-defineEventAttribute(proto, 'icecandidateerror');
-defineEventAttribute(proto, 'iceconnectionstatechange');
-defineEventAttribute(proto, 'icegatheringstatechange');
-defineEventAttribute(proto, 'negotiationneeded');
-defineEventAttribute(proto, 'signalingstatechange');
-defineEventAttribute(proto, 'datachannel');
-defineEventAttribute(proto, 'track');
-defineEventAttribute(proto, 'error');

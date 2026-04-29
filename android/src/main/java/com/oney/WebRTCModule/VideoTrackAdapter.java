@@ -10,6 +10,7 @@ import org.webrtc.VideoSink;
 import org.webrtc.VideoTrack;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -89,6 +90,10 @@ public class VideoTrackAdapter {
         Log.d(TAG, "Deleted dimension detector for " + trackId);
     }
 
+    void dispose() {
+        timer.cancel();
+    }
+
     /**
      * Implements 'mute'/'unmute' events for remote video tracks through
      * the {@link VideoSink} interface.
@@ -97,7 +102,8 @@ public class VideoTrackAdapter {
         private TimerTask emitMuteTask;
         private volatile boolean disposed;
         private AtomicInteger frameCounter;
-        private boolean mutedState;
+        // Per W3C spec, remote tracks MUST start muted.
+        private final AtomicBoolean mutedState = new AtomicBoolean(true);
         private final String trackId;
 
         TrackMuteUnmuteImpl(String trackId) {
@@ -107,7 +113,13 @@ public class VideoTrackAdapter {
 
         @Override
         public void onFrame(VideoFrame frame) {
-            frameCounter.addAndGet(1);
+            // incrementAndGet() == 1 is the atomic "first frame" check — fire
+            // unmute immediately instead of waiting up to INITIAL_MUTE_DELAY
+            // for the periodic timer. CAS guards against a race with the
+            // timer's first tick, which also writes mutedState.
+            if (frameCounter.incrementAndGet() == 1 && mutedState.compareAndSet(true, false)) {
+                emitMuteEvent(false);
+            }
         }
 
         private void start() {
@@ -128,8 +140,7 @@ public class VideoTrackAdapter {
                             return;
                         }
                         boolean isMuted = lastFrameNumber == frameCounter.get();
-                        if (isMuted != mutedState) {
-                            mutedState = isMuted;
+                        if (mutedState.compareAndSet(!isMuted, isMuted)) {
                             emitMuteEvent(isMuted);
                         }
 
@@ -206,7 +217,9 @@ public class VideoTrackAdapter {
             params.putInt("width", width);
             params.putInt("height", height);
 
-            Log.d(TAG, "Dimension change event pcId: " + peerConnectionId + " trackId: " + trackId + " dimensions: " + width + "x" + height);
+            Log.d(TAG,
+                    "Dimension change event pcId: " + peerConnectionId + " trackId: " + trackId
+                            + " dimensions: " + width + "x" + height);
 
             VideoTrackAdapter.this.webRTCModule.sendEvent("videoTrackDimensionChanged", params);
         }

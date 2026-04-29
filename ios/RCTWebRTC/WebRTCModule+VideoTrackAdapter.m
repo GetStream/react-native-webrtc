@@ -37,7 +37,7 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
 @implementation TrackMuteDetector {
     BOOL _disposed;
     atomic_ullong _frameCount;
-    BOOL _muted;
+    atomic_bool _muted;
     dispatch_source_t _timer;
 }
 
@@ -50,7 +50,8 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
 
         _disposed = NO;
         _frameCount = 0;
-        _muted = NO;
+        // Per W3C spec, remote tracks MUST start muted.
+        atomic_init(&_muted, true);
         _timer = nil;
     }
 
@@ -99,9 +100,9 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
             return;
         }
 
-        BOOL isMuted = lastFrameCount == self->_frameCount;
-        if (isMuted != self->_muted) {
-            self->_muted = isMuted;
+        bool isMuted = lastFrameCount == self->_frameCount;
+        bool expected = !isMuted;
+        if (atomic_compare_exchange_strong(&self->_muted, &expected, isMuted)) {
             [self emitMuteEvent:isMuted];
         }
 
@@ -112,7 +113,15 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
 }
 
 - (void)renderFrame:(nullable RTCVideoFrame *)frame {
-    atomic_fetch_add(&_frameCount, 1);
+    // atomic_fetch_add returns the prior value; == 0 is the atomic "first
+    // frame" check — fire unmute immediately instead of waiting up to
+    // INITIAL_MUTE_DELAY for the periodic timer. CAS guards against a
+    // race with the timer's first tick, which also writes _muted.
+    bool expected = true;
+    if (atomic_fetch_add(&_frameCount, 1) == 0
+        && atomic_compare_exchange_strong(&_muted, &expected, false)) {
+        [self emitMuteEvent:NO];
+    }
 }
 
 - (void)setSize:(CGSize)size {
@@ -248,8 +257,8 @@ static const NSTimeInterval MUTE_DELAY = 1.5;
     }
 
     VideoDimensionDetector *dimensionDetector = [[VideoDimensionDetector alloc] initWith:self.reactTag
-                                                                                  trackId:trackId
-                                                                             webRTCModule:self.webRTCModule];
+                                                                                 trackId:trackId
+                                                                            webRTCModule:self.webRTCModule];
     [self.videoDimensionDetectors setObject:dimensionDetector forKey:trackId];
     [track addRenderer:dimensionDetector];
 

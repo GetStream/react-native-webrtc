@@ -24,6 +24,7 @@
     if (self) {
         self.capturer = capturer;
         self.running = NO;
+        [self determineDevice:constraints];
         [self applyConstraints:constraints error:nil];
     }
 
@@ -68,7 +69,7 @@
         BOOL shouldChange = session.multitaskingCameraAccessEnabled != enable;
         BOOL canChange = !enable || (enable && session.isMultitaskingCameraAccessSupported);
 
-        if(shouldChange && canChange) {
+        if (shouldChange && canChange) {
             [session beginConfiguration];
             [session setMultitaskingCameraAccessEnabled:enable];
             [session commitConfiguration];
@@ -117,32 +118,10 @@
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
 }
 
-- (void)applyConstraints:(NSDictionary *)constraints error:(NSError **)outError {
+- (void)determineDevice:(NSDictionary *)constraints {
     // Clear device to prepare for starting camera with new constraints.
     self.device = nil;
-
-    BOOL hasChanged = NO;
-    
     NSString *deviceId = constraints[@"deviceId"];
-    int width = [constraints[@"width"] intValue];
-    int height = [constraints[@"height"] intValue];
-    int frameRate = [constraints[@"frameRate"] intValue];
-
-    if (self.width != width) {
-        hasChanged = YES;
-        self.width = width;
-    }
-    
-    if (self.height != height) {
-        hasChanged = YES;
-        self.height = height;
-    }
-    
-    if (self.frameRate != frameRate) {
-        hasChanged = YES;
-        self.frameRate = frameRate;
-    }
-
     id facingMode = constraints[@"facingMode"];
 
     if (!facingMode && !deviceId) {
@@ -164,7 +143,6 @@
 
         BOOL usingFrontCamera = position == AVCaptureDevicePositionFront;
         if (self.usingFrontCamera != usingFrontCamera) {
-            hasChanged = YES;
             self.usingFrontCamera = usingFrontCamera;
         }
     }
@@ -174,12 +152,58 @@
             self.usingFrontCamera ? AVCaptureDevicePositionFront : AVCaptureDevicePositionBack;
         deviceId = [self findDeviceForPosition:position].uniqueID;
     }
-    
+
     if (self.deviceId != deviceId && ![self.deviceId isEqualToString:deviceId]) {
-        hasChanged = YES;
         self.deviceId = deviceId;
     }
+}
 
+- (void)applyConstraints:(NSDictionary *)constraints error:(NSError **)outError {
+    BOOL hasChanged = NO;
+
+    // Re-read device-selecting constraints so MediaStreamTrack._switchCamera() can
+    // flip the camera via applyConstraints({facingMode}) — the W3C pattern browsers use.
+    NSString *deviceId = constraints[@"deviceId"];
+    id facingMode = constraints[@"facingMode"];
+
+    BOOL targetFront = self.usingFrontCamera;
+    if ([facingMode isKindOfClass:[NSString class]]) {
+        if ([facingMode isEqualToString:@"environment"]) {
+            targetFront = NO;
+        } else if ([facingMode isEqualToString:@"user"]) {
+            targetFront = YES;
+        }
+    }
+    if (targetFront != self.usingFrontCamera) {
+        self.usingFrontCamera = targetFront;
+        // Clear deviceId so `startCapture` re-resolves it from the new position.
+        self.deviceId = nil;
+        hasChanged = YES;
+    }
+
+    if (deviceId && ![deviceId isEqualToString:self.deviceId]) {
+        self.deviceId = deviceId;
+        hasChanged = YES;
+    }
+
+    int width = [constraints[@"width"] intValue];
+    int height = [constraints[@"height"] intValue];
+    int frameRate = [constraints[@"frameRate"] intValue];
+
+    if (self.width != width) {
+        hasChanged = YES;
+        self.width = width;
+    }
+
+    if (self.height != height) {
+        hasChanged = YES;
+        self.height = height;
+    }
+
+    if (self.frameRate != frameRate) {
+        hasChanged = YES;
+        self.frameRate = frameRate;
+    }
 
     if (self.running && hasChanged) {
         [self stopCapture];
@@ -191,7 +215,7 @@
     AVCaptureDeviceFormat *format = self.selectedFormat;
     CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
     NSMutableDictionary *settings = [[NSMutableDictionary alloc] initWithDictionary:@{
-        @"groupId": @"",
+        @"groupId" : @"",
         @"height" : @(dimensions.height),
         @"width" : @(dimensions.width),
         @"frameRate" : @(30),

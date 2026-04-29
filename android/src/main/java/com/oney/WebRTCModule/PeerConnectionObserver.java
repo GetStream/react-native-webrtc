@@ -11,6 +11,7 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 
+import org.webrtc.AudioTrack;
 import org.webrtc.DataChannel;
 import org.webrtc.IceCandidate;
 import org.webrtc.MediaStream;
@@ -42,6 +43,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     final Map<String, MediaStream> remoteStreams; // React tag -> MediaStream
     final Map<String, MediaStreamTrack> remoteTracks;
     final VideoTrackAdapter videoTrackAdapters;
+    final AudioTrackAdapter audioTrackAdapters;
     private final WebRTCModule webRTCModule;
 
     PeerConnectionObserver(WebRTCModule webRTCModule, int id) {
@@ -52,6 +54,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         this.remoteStreams = new HashMap<>();
         this.remoteTracks = new HashMap<>();
         this.videoTrackAdapters = new VideoTrackAdapter(webRTCModule, id);
+        this.audioTrackAdapters = new AudioTrackAdapter(webRTCModule, id);
     }
 
     PeerConnection getPeerConnection() {
@@ -71,11 +74,13 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     void dispose() {
         Log.d(TAG, "PeerConnection.dispose() for " + id);
 
-        // Remove video track adapters
+        // Remove track adapters for remote tracks
         for (MediaStreamTrack track : this.remoteTracks.values()) {
             if (track instanceof VideoTrack) {
                 videoTrackAdapters.removeAdapter((VideoTrack) track);
                 videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
+            } else if (track instanceof AudioTrack) {
+                audioTrackAdapters.removeAdapter((AudioTrack) track);
             }
         }
 
@@ -98,6 +103,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         // PeerConnection. Call dispose() to free all remaining resources held
         // by the PeerConnection instance (RtpReceivers, RtpSenders, etc.)
         peerConnection.dispose();
+
+        videoTrackAdapters.dispose();
 
         remoteStreamIds.clear();
         remoteStreams.clear();
@@ -123,6 +130,20 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         }
 
         return peerConnection.addTransceiver(track, init);
+    }
+
+    RtpReceiver getReceiver(String id) {
+        if (this.peerConnection == null) {
+            return null;
+        }
+
+        for (RtpReceiver receiver : this.peerConnection.getReceivers()) {
+            if (receiver.id().equals(id)) {
+                return receiver;
+            }
+        }
+
+        return null;
     }
 
     RtpSender getSender(String id) {
@@ -260,7 +281,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             return;
         }
 
-        peerConnection.getStats(targetReceiver, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
+        peerConnection.getStats(
+                targetReceiver, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
     }
 
     public void senderGetStats(String senderId, Promise promise) {
@@ -278,7 +300,8 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             return;
         }
 
-        peerConnection.getStats(targetSender, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
+        peerConnection.getStats(
+                targetSender, rtcStatsReport -> promise.resolve(StringUtils.statsToJSON(rtcStatsReport)));
     }
 
     @Override
@@ -443,6 +466,9 @@ class PeerConnectionObserver implements PeerConnection.Observer {
                 if (track.kind().equals(MediaStreamTrack.VIDEO_TRACK_KIND)) {
                     videoTrackAdapters.addAdapter((VideoTrack) track);
                     videoTrackAdapters.addDimensionDetector((VideoTrack) track);
+                } else if (track.kind().equals(MediaStreamTrack.AUDIO_TRACK_KIND)) {
+                    audioTrackAdapters.addAdapter((AudioTrack) track);
+                    ((AudioTrack) track).setVolume(WebRTCModuleOptions.getInstance().defaultTrackVolume);
                 }
                 remoteTracks.put(track.id(), track);
             }
@@ -490,6 +516,24 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     @Override
     public void onRemoveTrack(RtpReceiver receiver) {
         ThreadUtils.runOnExecutor(() -> {
+            // Tear down track adapters so a subsequent onAddTrack with the
+            // same trackId (SFU participant rejoin) creates a fresh adapter
+            // on the new MediaStreamTrack object. Without this, the old sink
+            // stays bound to a dead track, no first-frame/data fires on the
+            // new track, and JS track.muted (set true by onRemoveTrack) never
+            // flips back to false.
+            MediaStreamTrack track = receiver.track();
+            if (track != null) {
+                String trackId = track.id();
+                if (track instanceof VideoTrack) {
+                    videoTrackAdapters.removeAdapter((VideoTrack) track);
+                    videoTrackAdapters.removeDimensionDetector((VideoTrack) track);
+                } else if (track instanceof AudioTrack) {
+                    audioTrackAdapters.removeAdapter((AudioTrack) track);
+                }
+                remoteTracks.remove(trackId);
+            }
+
             WritableMap params = Arguments.createMap();
             params.putInt("pcId", this.id);
             params.putString("receiverId", receiver.id());

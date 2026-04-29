@@ -15,6 +15,7 @@ public class VideoEffectProcessor implements VideoProcessor {
     private VideoSink mSink;
     final private SurfaceTextureHelper textureHelper;
     final private List<VideoFrameProcessor> videoFrameProcessors;
+    private boolean disposed = false;
 
     public VideoEffectProcessor(List<VideoFrameProcessor> processors, SurfaceTextureHelper textureHelper) {
         this.textureHelper = textureHelper;
@@ -26,6 +27,21 @@ public class VideoEffectProcessor implements VideoProcessor {
 
     @Override
     public void onCapturerStopped() {}
+
+    /**
+     * Disposes each wrapped processor. Runs on the capturer handler so it fires
+     * after any in-flight frame, letting implementations clean up GL state inline.
+     * Idempotent. Not in onCapturerStopped because that also fires on pause.
+     */
+    public void dispose() {
+        textureHelper.getHandler().post(() -> {
+            if (disposed) return;
+            disposed = true;
+            for (VideoFrameProcessor processor : this.videoFrameProcessors) {
+                processor.dispose();
+            }
+        });
+    }
 
     @Override
     public void setSink(VideoSink sink) {

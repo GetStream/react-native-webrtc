@@ -14,4 +14,13 @@
 
 @interface WebRTCModule (RTCPeerConnection)<RTCPeerConnectionDelegate>
 
++ (RTCCertificate *)getCertificate:(NSString *)certId;
+
+- (nullable RTCRtpSender *)getSenderByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                              senderId:(nonnull NSString *)senderId;
+- (nullable RTCRtpReceiver *)getReceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                                receiverId:(nonnull NSString *)receiverId;
+- (nullable RTCRtpTransceiver *)getTransceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                                   transceiverId:(nonnull NSString *)transceiverId;
+
 @end
