@@ -8,7 +8,7 @@
 #if TARGET_OS_OSX
 #import <WebRTC/RTCMTLNSVideoView.h>
 #else
-#import <WebRTC/RTCMTLVideoView.h>
+#import <WebRTC/RTCVideoRenderingView.h>
 #endif
 #import <WebRTC/RTCCVPixelBuffer.h>
 #import <WebRTC/RTCVideoFrame.h>
@@ -67,7 +67,7 @@ typedef NS_ENUM(NSInteger, RTCVideoViewObjectFit) {
 #if TARGET_OS_OSX
 @property(nonatomic, readonly) RTCMTLNSVideoView *videoView;
 #else
-@property(nonatomic, readonly) RTCMTLVideoView *videoView;
+@property(nonatomic, readonly) RTCVideoRenderingView *videoView;
 #endif
 
 /**
@@ -124,7 +124,8 @@ typedef NS_ENUM(NSInteger, RTCVideoViewObjectFit) {
         subview.wantsLayer = true;
         _videoView = subview;
 #else
-        RTCMTLVideoView *subview = [[RTCMTLVideoView alloc] initWithFrame:CGRectZero];
+        RTCVideoRenderingView *subview = [[RTCVideoRenderingView alloc] initWithFrame:CGRectZero];
+        subview.renderingBackend = RTCVideoRenderingBackendSharedMetal;
         _videoView = subview;
 #endif
         [self addSubview:self.videoView];
