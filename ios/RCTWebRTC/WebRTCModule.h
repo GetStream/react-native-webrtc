@@ -55,4 +55,6 @@ static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 
+- (nullable RTCMediaStreamTrack *)trackForId:(NSString *)trackId;
+
 @end
