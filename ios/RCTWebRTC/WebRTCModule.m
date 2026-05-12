@@ -135,9 +135,6 @@
         _localStreams = [NSMutableDictionary new];
         _localTracks = [NSMutableDictionary new];
 
-        _frameCryptors = [NSMutableDictionary new];
-        _keyProviders = [NSMutableDictionary new];
-
         dispatch_queue_attr_t attributes =
             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
         _workerQueue = dispatch_queue_create("WebRTCModule.queue", attributes);
@@ -183,7 +180,6 @@ RCT_EXPORT_MODULE();
         kEventMediaStreamTrackEnded,
         kEventPeerConnectionOnRemoveTrack,
         kEventPeerConnectionOnTrack,
-        kEventFrameCryptionStateChanged,
         kEventAudioDeviceModuleSpeechActivity,
         kEventAudioDeviceModuleEngineCreated,
         kEventAudioDeviceModuleEngineWillEnable,

@@ -22,7 +22,6 @@ static NSString *const kEventVideoTrackDimensionChanged = @"videoTrackDimensionC
 static NSString *const kEventMediaStreamTrackEnded = @"mediaStreamTrackEnded";
 static NSString *const kEventPeerConnectionOnRemoveTrack = @"peerConnectionOnRemoveTrack";
 static NSString *const kEventPeerConnectionOnTrack = @"peerConnectionOnTrack";
-static NSString *const kEventFrameCryptionStateChanged = @"frameCryptionStateChanged";
 static NSString *const kEventAudioDeviceModuleSpeechActivity = @"audioDeviceModuleSpeechActivity";
 static NSString *const kEventAudioDeviceModuleEngineCreated = @"audioDeviceModuleEngineCreated";
 static NSString *const kEventAudioDeviceModuleEngineWillEnable = @"audioDeviceModuleEngineWillEnable";
@@ -48,9 +47,6 @@ static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
 @property(nonatomic, strong) NSMutableDictionary<NSNumber *, RTCPeerConnection *> *peerConnections;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStream *> *localStreams;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStreamTrack *> *localTracks;
-
-@property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptor *> *frameCryptors;
-@property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptorKeyProvider *> *keyProviders;
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 
