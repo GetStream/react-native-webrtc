@@ -1653,7 +1653,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     // Frame Cryptor methods
     ////////////////////////////////
-    RTCCryptoManager frameCryptor = new RTCCryptoManager(this);
+    RTCFrameCryptor frameCryptor = new RTCFrameCryptor(this);
 
     @ReactMethod(isBlockingSynchronousMethod = true)
     public String frameCryptorFactoryCreateFrameCryptor(ReadableMap config) {
@@ -1728,98 +1728,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void keyProviderDispose(ReadableMap config, Promise promise) {
         frameCryptor.keyProviderDispose(config, promise);
-    }
-
-    @ReactMethod
-    public void generateCertificate(ReadableMap options, Promise promise) {
-        ThreadUtils.runOnExecutor(() -> {
-            try {
-                PeerConnection.KeyType keyType = PeerConnection.KeyType.ECDSA;
-                long expires = 2592000L; // Default 30 days
-
-                if (options.hasKey("keyType")) {
-                    String keyTypeStr = options.getString("keyType");
-                    if ("RSA".equals(keyTypeStr)) {
-                        keyType = PeerConnection.KeyType.RSA;
-                    } else if ("ECDSA".equals(keyTypeStr)) {
-                        keyType = PeerConnection.KeyType.ECDSA;
-                    }
-                }
-
-                if (options.hasKey("expires")) {
-                    expires = (long) options.getDouble("expires");
-                }
-
-                RtcCertificatePem cert = RtcCertificatePem.generateCertificate(keyType, expires);
-                String certId = java.util.UUID.randomUUID().toString();
-                synchronized (mCertificates) {
-                    mCertificates.put(certId, cert);
-                }
-
-                WritableMap params = Arguments.createMap();
-                params.putString("certificateId", certId);
-                // Return expires as millis since epoch
-                params.putDouble("expires", System.currentTimeMillis() + expires * 1000);
-
-                // Calculate fingerprints
-                WritableArray fingerprints = Arguments.createArray();
-
-                try {
-                    CertificateFactory cf = CertificateFactory.getInstance("X.509");
-                    ByteArrayInputStream is =
-                            new ByteArrayInputStream(cert.certificate.getBytes(StandardCharsets.UTF_8));
-                    X509Certificate x509Cert = (X509Certificate) cf.generateCertificate(is);
-
-                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                    byte[] hash = digest.digest(x509Cert.getEncoded());
-
-                    WritableMap fingerprint = Arguments.createMap();
-                    fingerprint.putString("algorithm", "sha-256");
-                    fingerprint.putString("value", bytesToHex(hash));
-                    fingerprints.pushMap(fingerprint);
-                } catch (Exception e) {
-                    Log.e(TAG, "Failed to calculate fingerprint: " + e.getMessage());
-                }
-
-                params.putArray("fingerprints", fingerprints);
-
-                promise.resolve(params);
-            } catch (Exception e) {
-                promise.reject(e);
-            }
-        });
-    }
-
-    private String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-            sb.append(":");
-        }
-        if (sb.length() > 0) {
-            sb.setLength(sb.length() - 1);
-        }
-        return sb.toString();
-    }
-
-    @ReactMethod
-    public void dataPacketCryptorFactoryCreateDataPacketCryptor(ReadableMap params, @NonNull Promise result) {
-        frameCryptor.dataPacketCryptorFactoryCreateDataPacketCryptor(params, result);
-    }
-
-    @ReactMethod
-    public void dataPacketCryptorEncrypt(ReadableMap params, @NonNull Promise result) {
-        frameCryptor.dataPacketCryptorEncrypt(params, result);
-    }
-
-    @ReactMethod
-    public void dataPacketCryptorDecrypt(ReadableMap params, @NonNull Promise result) {
-        frameCryptor.dataPacketCryptorDecrypt(params, result);
-    }
-
-    @ReactMethod
-    public void dataPacketCryptorDispose(ReadableMap params, @NonNull Promise result) {
-        frameCryptor.dataPacketCryptorDispose(params, result);
     }
 
     @ReactMethod

@@ -11,7 +11,6 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 
-import org.webrtc.DataPacketCryptor;
 import org.webrtc.FrameCryptor;
 import org.webrtc.FrameCryptorAlgorithm;
 import org.webrtc.FrameCryptorFactory;
@@ -25,15 +24,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-public class RTCCryptoManager {
+public class RTCFrameCryptor {
     private static final String TAG = "RTCFrameCryptor";
     private final Map<String, FrameCryptor> frameCryptos = new HashMap<>();
     private final Map<String, FrameCryptorStateObserver> frameCryptoObservers = new HashMap<>();
     private final Map<String, FrameCryptorKeyProvider> keyProviders = new HashMap<>();
-    private final Map<String, DataPacketCryptorManager> dataPacketCryptors = new HashMap<>();
     private final WebRTCModule webRTCModule;
 
-    public RTCCryptoManager(WebRTCModule webRTCModule) {
+    public RTCFrameCryptor(WebRTCModule webRTCModule) {
         this.webRTCModule = webRTCModule;
     }
 
@@ -271,7 +269,7 @@ public class RTCCryptoManager {
         byte[] newKey = keyProvider.ratchetSharedKey(keyIndex);
 
         WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("result", Base64.encodeToString(newKey, Base64.NO_WRAP));
+        paramsResult.putString("result", Base64.encodeToString(newKey, Base64.DEFAULT));
         result.resolve(paramsResult);
     }
 
@@ -287,7 +285,7 @@ public class RTCCryptoManager {
         byte[] key = keyProvider.exportSharedKey(keyIndex);
 
         WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("result", Base64.encodeToString(key, Base64.NO_WRAP));
+        paramsResult.putString("result", Base64.encodeToString(key, Base64.DEFAULT));
         result.resolve(paramsResult);
     }
 
@@ -321,7 +319,7 @@ public class RTCCryptoManager {
         byte[] newKey = keyProvider.ratchetKey(participantId, keyIndex);
 
         WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("result", Base64.encodeToString(newKey, Base64.NO_WRAP));
+        paramsResult.putString("result", Base64.encodeToString(newKey, Base64.DEFAULT));
         result.resolve(paramsResult);
     }
 
@@ -338,7 +336,7 @@ public class RTCCryptoManager {
         byte[] key = keyProvider.exportKey(participantId, keyIndex);
 
         WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("result", Base64.encodeToString(key, Base64.NO_WRAP));
+        paramsResult.putString("result", Base64.encodeToString(key, Base64.DEFAULT));
         result.resolve(paramsResult);
     }
 
@@ -349,7 +347,7 @@ public class RTCCryptoManager {
             result.reject("keyProviderSetSifTrailerFailed", "keyProvider not found", (Throwable) null);
             return;
         }
-        byte[] sifTrailer = Base64.decode(params.getString("sifTrailer"), Base64.NO_WRAP);
+        byte[] sifTrailer = Base64.decode(params.getString("sifTrailer"), Base64.DEFAULT);
         keyProvider.setSifTrailer(sifTrailer);
 
         WritableMap paramsResult = Arguments.createMap();
@@ -371,110 +369,8 @@ public class RTCCryptoManager {
         result.resolve(paramsResult);
     }
 
-    public void dataPacketCryptorFactoryCreateDataPacketCryptor(ReadableMap params, @NonNull Promise result) {
-        int algorithm = params.getInt("algorithm");
-        String keyProviderId = params.getString("keyProviderId");
-
-        FrameCryptorKeyProvider keyProvider = keyProviders.get(keyProviderId);
-        if (keyProvider == null) {
-            result.reject(
-                    "dataPacketCryptorFactoryCreateDataPacketCryptorFailed", "keyProvider not found", (Throwable) null);
-            return;
-        }
-
-        DataPacketCryptorManager cryptor =
-                new DataPacketCryptorManager(frameCryptorAlgorithmFromInt(algorithm), keyProvider);
-
-        String dataPacketCryptorId = UUID.randomUUID().toString();
-        dataPacketCryptors.put(dataPacketCryptorId, cryptor);
-
-        WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("dataPacketCryptorId", dataPacketCryptorId);
-        result.resolve(paramsResult);
-    }
-
-    public void dataPacketCryptorEncrypt(ReadableMap params, @NonNull Promise result) {
-        String dataPacketCryptorId = params.getString("dataPacketCryptorId");
-        String participantId = params.getString("participantId");
-        int keyIndex = params.getInt("keyIndex");
-        byte[] data = getBytesFromMap(params, "data", null);
-
-        DataPacketCryptorManager cryptor = dataPacketCryptors.get(dataPacketCryptorId);
-
-        if (cryptor == null) {
-            result.reject("dataPacketCryptorEncryptFailed", "data packet cryptor not found", (Throwable) null);
-            return;
-        }
-
-        DataPacketCryptor.EncryptedPacket packet = cryptor.encrypt(participantId, keyIndex, data);
-
-        if (packet == null) {
-            result.reject("dataPacketCryptorEncryptFailed", "null packet", (Throwable) null);
-            return;
-        }
-
-        WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("payload", Base64.encodeToString(packet.payload, Base64.NO_WRAP));
-        paramsResult.putString("iv", Base64.encodeToString(packet.iv, Base64.NO_WRAP));
-        paramsResult.putInt("keyIndex", packet.keyIndex);
-        result.resolve(paramsResult);
-    }
-
-    public void dataPacketCryptorDecrypt(ReadableMap params, @NonNull Promise result) {
-        String dataPacketCryptorId = params.getString("dataPacketCryptorId");
-        String participantId = params.getString("participantId");
-        int keyIndex = params.getInt("keyIndex");
-        byte[] payload = getBytesFromMap(params, "payload", null);
-        byte[] iv = getBytesFromMap(params, "iv", null);
-
-        DataPacketCryptorManager cryptor = dataPacketCryptors.get(dataPacketCryptorId);
-
-        if (cryptor == null) {
-            result.reject("dataPacketCryptorDecryptFailed", "data packet cryptor not found", (Throwable) null);
-            return;
-        }
-
-        DataPacketCryptor.EncryptedPacket packet = new DataPacketCryptor.EncryptedPacket(payload, iv, keyIndex);
-
-        byte[] decryptedData = cryptor.decrypt(participantId, packet);
-
-        if (decryptedData == null) {
-            result.reject("dataPacketCryptorDecryptFailed", "null decrypted data", (Throwable) null);
-            return;
-        }
-
-        WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("data", Base64.encodeToString(decryptedData, Base64.NO_WRAP));
-        result.resolve(paramsResult);
-    }
-
-    public void dataPacketCryptorDispose(ReadableMap params, @NonNull Promise result) {
-        String dataPacketCryptorId = params.getString("dataPacketCryptorId");
-
-        DataPacketCryptorManager cryptor = dataPacketCryptors.get(dataPacketCryptorId);
-
-        if (cryptor == null) {
-            result.reject("dataPacketCryptorDisposeFailed", "data packet cryptor not found", (Throwable) null);
-            return;
-        }
-
-        cryptor.dispose();
-        dataPacketCryptors.remove(dataPacketCryptorId);
-        WritableMap paramsResult = Arguments.createMap();
-        paramsResult.putString("result", "success");
-
-        result.resolve(paramsResult);
-    }
-
-    private byte[] getBytesFromMap(ReadableMap map, String key, @Nullable String isBase64Key) {
-        boolean isBase64;
-
-        if (isBase64Key != null) {
-            isBase64 = map.getBoolean(isBase64Key);
-        } else {
-            isBase64 = true;
-        }
-
+    private byte[] getBytesFromMap(ReadableMap map, String key, String isBase64Key) {
+        boolean isBase64 = map.getBoolean(isBase64Key);
         byte[] bytes;
 
         if (isBase64) {
