@@ -36,7 +36,7 @@ import WebRTC
     }
 
     /// Events emitted as the underlying audio engine changes state.
-    enum Event: Equatable, CustomStringConvertible {
+    public enum Event: Equatable, CustomStringConvertible {
         /// Outbound audio surpassed the silence threshold.
         case speechActivityStarted
         /// Outbound audio dropped back to silence.
@@ -65,7 +65,7 @@ import WebRTC
             stereoPlayoutEnabled: Bool
         )
 
-        var description: String {
+        public var description: String {
             switch self {
             case .speechActivityStarted:
                 return ".speechActivityStarted"
@@ -174,7 +174,7 @@ import WebRTC
     /// Object that taps engine nodes and publishes audio level data.
     private var audioLevelsAdapter: AudioEngineNodeAdapting
     /// Public stream of `Event` values describing engine transitions.
-    let publisher: AnyPublisher<Event, Never>
+    public let publisher: AnyPublisher<Event, Never>
 
     /// Strong reference to the current engine so we can introspect it if needed.
     @objc public var engine: AVAudioEngine?
