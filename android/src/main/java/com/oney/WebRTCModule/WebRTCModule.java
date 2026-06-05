@@ -236,6 +236,20 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                         speechActivityDetector.onRecordStop();
                     }
                 })
+                .setPlaybackSamplesReadyCallback(samples -> {
+                    // Fan-out to every registered consumer. The list is
+                    // a CopyOnWriteArrayList so iteration is safe even
+                    // if a consumer registers/unregisters mid-call.
+                    for (JavaAudioDeviceModule.PlaybackSamplesReadyCallback obs :
+                            WebRTCModuleOptions.getInstance().getPlaybackSamplesObservers()) {
+                        try {
+                            obs.onWebRtcAudioTrackSamplesReady(samples);
+                        } catch (Throwable t) {
+                            // Audio device module thread must not throw.
+                            android.util.Log.w(TAG, "playback samples observer threw", t);
+                        }
+                    }
+                })
                 .createAudioDeviceModule();
     }
 
@@ -626,6 +640,31 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     MediaStreamTrack getLocalTrack(String trackId) {
         return getUserMediaImpl.getTrack(trackId);
+    }
+
+    @Nullable
+    public MediaStreamTrack getTrackById(String trackId) {
+        if (trackId == null) {
+            return null;
+        }
+        MediaStreamTrack local = getLocalTrack(trackId);
+        if (local != null) {
+            return local;
+        }
+        for (int i = 0, size = mPeerConnectionObservers.size(); i < size; i++) {
+            PeerConnectionObserver pco = mPeerConnectionObservers.valueAt(i);
+            PeerConnection pc = pco.getPeerConnection();
+            if (pc == null) {
+                continue;
+            }
+            for (RtpReceiver receiver : pc.getReceivers()) {
+                MediaStreamTrack track = receiver.track();
+                if (track != null && trackId.equals(track.id())) {
+                    return track;
+                }
+            }
+        }
+        return null;
     }
 
     public VideoTrack createVideoTrack(AbstractVideoCaptureController videoCaptureController) {

@@ -159,6 +159,32 @@
     return stream;
 }
 
+- (nullable RTCMediaStreamTrack *)trackForId:(NSString *)trackId {
+    if (trackId.length == 0) {
+        return nil;
+    }
+    RTCMediaStreamTrack *track = _localTracks[trackId];
+    if (track) {
+        return track;
+    }
+    for (NSNumber *peerConnectionId in _peerConnections) {
+        RTCPeerConnection *peerConnection = _peerConnections[peerConnectionId];
+        for (RTCRtpReceiver *receiver in peerConnection.receivers) {
+            RTCMediaStreamTrack *received = receiver.track;
+            if (received && [received.trackId isEqualToString:trackId]) {
+                return received;
+            }
+        }
+        for (RTCRtpSender *sender in peerConnection.senders) {
+            RTCMediaStreamTrack *sent = sender.track;
+            if (sent && [sent.trackId isEqualToString:trackId]) {
+                return sent;
+            }
+        }
+    }
+    return nil;
+}
+
 RCT_EXPORT_MODULE();
 
 - (dispatch_queue_t)methodQueue {
