@@ -194,8 +194,8 @@ public class VideoTrackAdapter {
                 return;
             }
 
-            int width = frame.getBuffer().getWidth();
-            int height = frame.getBuffer().getHeight();
+            int width = frame.getRotatedWidth();
+            int height = frame.getRotatedHeight();
 
             // Check if this is a meaningful size change
             if (!hasInitialSize) {

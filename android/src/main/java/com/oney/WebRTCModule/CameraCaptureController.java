@@ -3,6 +3,8 @@ package com.oney.WebRTCModule;
 import android.content.Context;
 import android.hardware.camera2.CameraManager;
 import android.util.Log;
+import android.view.Surface;
+import android.view.WindowManager;
 
 import androidx.annotation.Nullable;
 import androidx.core.util.Consumer;
@@ -30,6 +32,9 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
     private static final String TAG = CameraCaptureController.class.getSimpleName();
 
     private boolean isFrontFacing;
+
+    /** Cached SENSOR_ORIENTATION of the active camera (0/90/180/270), or -1 if unknown. Updated on every camera open/switch. */
+    private int sensorOrientation = -1;
 
     /**
      * Equivalent to the camera index as a String
@@ -85,10 +90,36 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         return -1;
     }
 
+    /** True when the delivered frame is rotated 90/270 vs the sensor, so reported W/H must swap.
+     *  Unknown sensor orientation (-1) → false: report the capture format unchanged (status quo, no
+     *  regression) rather than guessing. Pure → testable. */
+    static boolean shouldSwapDimensions(int sensorOrientation, int displayRotationDegrees) {
+        if (sensorOrientation < 0) return false;
+        return ((sensorOrientation + displayRotationDegrees) % 180) == 90;
+    }
+
+    /** Current display rotation in degrees (0/90/180/270). Matches CameraSession.getDeviceOrientation. */
+    private int getDeviceRotationDegrees() {
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        switch (wm.getDefaultDisplay().getRotation()) {
+            case Surface.ROTATION_90:  return 90;
+            case Surface.ROTATION_180: return 180;
+            case Surface.ROTATION_270: return 270;
+            case Surface.ROTATION_0:
+            default:                   return 0;
+        }
+    }
+
     @Override
     public WritableMap getSettings() {
         WritableMap settings = super.getSettings();
         settings.putString("facingMode", isFrontFacing ? "user" : "environment");
+        // M145 delivers frames pre-rotated to the device orientation; super.getSettings() reports the
+        // capture format in sensor space. Swap so reported dims match the delivered/rendered frame.
+        if (shouldSwapDimensions(sensorOrientation, getDeviceRotationDegrees())) {
+            settings.putInt("width", getHeight());
+            settings.putInt("height", getWidth());
+        }
         return settings;
     }
 
@@ -221,9 +252,13 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         Size actualSize = null;
         if (videoCapturer instanceof Camera1Capturer) {
             actualSize = Camera1Helper.findClosestCaptureFormat(cameraIndex, targetWidth, targetHeight);
+            sensorOrientation = Camera1Helper.getSensorOrientation(cameraIndex);   // may be -1 (unknown)
+            if (sensorOrientation < 0) Log.w(TAG, "Sensor orientation unavailable for camera " + cameraIndex + "; dimension swap disabled");
         } else if (videoCapturer instanceof Camera2Capturer) {
             CameraManager cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
             actualSize = Camera2Helper.findClosestCaptureFormat(cameraManager, cameraName, targetWidth, targetHeight);
+            sensorOrientation = Camera2Helper.getSensorOrientation(cameraManager, cameraName);   // may be -1
+            if (sensorOrientation < 0) Log.w(TAG, "Sensor orientation unavailable for camera " + cameraName + "; dimension swap disabled");
         }
 
         if (actualSize != null) {
