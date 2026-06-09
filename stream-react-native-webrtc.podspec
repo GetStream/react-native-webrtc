@@ -21,7 +21,7 @@ Pod::Spec.new do |s|
   s.swift_version       = '5.0'
   s.dependency          'React-Core'
   # WebRTC version from https://github.com/GetStream/stream-video-swift-webrtc releases
-  s.dependency          'StreamWebRTC', '= 145.8.0'
+  s.dependency          'StreamWebRTC', '= 145.9.0'
   # Swift/Objective-C compatibility #https://blog.cocoapods.org/CocoaPods-1.5.0/
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES'
