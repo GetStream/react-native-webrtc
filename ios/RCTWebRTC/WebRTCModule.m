@@ -61,13 +61,15 @@
         NSDictionary *fieldTrials = options.fieldTrials;
         RTCLoggingSeverity loggingSeverity = options.loggingSeverity;
 
-        // Initialize field trials.
-        if (fieldTrials == nil) {
-            // Fix for dual-sim connectivity:
-            // https://bugs.chromium.org/p/webrtc/issues/detail?id=10966
-            fieldTrials = @{kRTCFieldTrialUseNWPathMonitor : kRTCFieldTrialEnabledValue};
-        }
-        RTCInitFieldTrialDictionary(fieldTrials);
+        // Temporarily disable field trials
+        // this supposedly makes libwebrtc promptly detect wifi↔cellular route changes and reset the send-side BWE — and never enables WebRTC-Bwe-SafeResetOnRouteChange
+        // // Initialize field trials.
+        // if (fieldTrials == nil) {
+        //     // Fix for dual-sim connectivity:
+        //     // https://bugs.chromium.org/p/webrtc/issues/detail?id=10966
+        //     fieldTrials = @{kRTCFieldTrialUseNWPathMonitor : kRTCFieldTrialEnabledValue};
+        // }
+        // RTCInitFieldTrialDictionary(fieldTrials);
 
         // Initialize logging.
         RTCSetMinDebugLogLevel(loggingSeverity);
