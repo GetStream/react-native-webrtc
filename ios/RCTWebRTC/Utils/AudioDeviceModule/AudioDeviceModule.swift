@@ -251,7 +251,6 @@ import WebRTC
     /// Reinitializes the ADM, clearing its internal audio graph state.
     @objc public func reset() {
         _ = source.reset()
-        _ = source.setMuteMode(.inputMixer)
     }
 
     /// Switches between stereo and mono playout while keeping the recording
@@ -264,7 +263,7 @@ import WebRTC
         /// means that for outputs where VP is disabled (e.g. stereo) we cannot mute/unmute.
         /// - `.restartEngine`: rebuilds the whole graph and requires explicit calling of
         /// `initAndStartRecording` .
-        // _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
+        _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
         /// - Important: We can probably set this one to false when the user doesn't have
         /// sendAudio capability.
         _ = source.setRecordingAlwaysPreparedMode(false)
@@ -355,10 +354,10 @@ import WebRTC
     ) {
         switch speechActivityEvent {
         case .started:
-            NSLog("[Callingx | AudioDeviceModule] speechActivityStarted")
+            NSLog("[AudioDeviceModule] speechActivityStarted")
             subject.send(.speechActivityStarted)
         case .ended:
-            NSLog("[Callingx | AudioDeviceModule] speechActivityEnded")
+            NSLog("[AudioDeviceModule] speechActivityEnded")
             subject.send(.speechActivityEnded)
         @unknown default:
             break

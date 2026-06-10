@@ -618,6 +618,15 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
         } else {
             [track.captureController stopCapture];
         }
+    } else if (pcId.intValue == -1 && [track.kind isEqualToString:@"audio"]) {
+        // Local microphone track. Mirror the enabled-state to the AudioDeviceModule so muting
+        // engages voice-processing mute (voiceProcessingInputMuted = true) while the input node
+        // keeps running.
+        NSError *error = nil;
+        if (![self.audioDeviceModule setMuted:!enabled error:&error]) {
+            NSLog(@"[WebRTCModule] Failed to mirror local audio enabled=%d to ADM mute: %@",
+                  enabled, error.localizedDescription);
+        }
     }
 #endif
 }

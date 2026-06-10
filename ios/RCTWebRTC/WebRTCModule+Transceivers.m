@@ -10,6 +10,13 @@
 #import "SerializeUtils.h"
 #import "WebRTCModule.h"
 
+// Import Swift-generated header to reach AudioDeviceModule
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
+
 @implementation WebRTCModule (Transceivers)
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(senderGetCapabilities : (NSString *)kind) {
@@ -63,6 +70,16 @@ RCT_EXPORT_METHOD(senderReplaceTrack
     RTCRtpSender *sender = transceiver.sender;
     RTCMediaStreamTrack *track = self.localTracks[trackId];
     [sender setTrack:track];
+
+    if (track != nil && [track.kind isEqualToString:@"audio"]) {
+
+        // Mirror the track's enabled state to the ADM so voice-processing mute is cleared on unmute
+        NSError *admError = nil;
+        if (![self.audioDeviceModule setMuted:!track.isEnabled error:&admError]) {
+            NSLog(@"[WebRTCModule] Failed to sync ADM mute on audio replaceTrack: %@",
+                  admError.localizedDescription);
+        }
+    }
     resolve(@true);
 }
 
