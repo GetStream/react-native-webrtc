@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@stream-io/react-native-webrtc)](https://www.npmjs.com/package/@stream-io/react-native-webrtc)
 [![npm downloads](https://img.shields.io/npm/dm/@stream-io/react-native-webrtc)](https://www.npmjs.com/package/@stream-io/react-native-webrtc)
 
-A WebRTC module for React Native tailored for the `@stream-io/video-react-native-sdk` needs.
+A WebRTC module for React Native tailored for the [`@stream-io/video-react-native-sdk`](https://github.com/GetStream/stream-video-js) needs.
 
 ## Getting Started
 
