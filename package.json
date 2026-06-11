@@ -53,16 +53,20 @@
     "lint": "eslint --max-warnings 0 . && tsc --noEmit",
     "lintfix": "eslint --max-warnings 0 --fix . && tsc --noEmit",
     "prepare": "husky install && bob build",
-    "format": "tools/format.sh"
+    "format": "tools/format.sh",
+    "semantic-release": "semantic-release"
   },
   "bugs": {
     "url": "https://github.com/GetStream/react-native-webrtc/issues"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "@types/debug": "4.1.7",
     "@types/react": "^19.1.8",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
     "@typescript-eslint/parser": "^5.39.0",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "eslint": "^8.24.0",
     "eslint-plugin-import": "^2.26.0",
     "husky": "7.0.2",
@@ -70,6 +74,7 @@
     "prettier": "2.4.1",
     "react-native": "0.80.1",
     "react-native-builder-bob": "0.18.2",
+    "semantic-release": "^25.0.3",
     "typescript": "^5.8.3"
   },
   "lint-staged": {
