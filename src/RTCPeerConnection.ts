@@ -115,6 +115,13 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
     _iceTransport: RTCIceTransport;
     _dtlsTransport: RTCDtlsTransport;
 
+    // BUNDLE-assumption guard: distinct ICE transport names (the candidate's
+    // sdpMid / transport_name) observed via selectedcandidatepairchange. More
+    // than one means the connection negotiated multiple transports, which the
+    // single shared transport pair above cannot represent faithfully.
+    _seenTransportNames: Set<string> = new Set();
+    _multiTransportWarned = false;
+
     static generateCertificate(
         keygenAlgorithm: string | {
             name: string,
@@ -789,6 +796,25 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this._iceTransport._setSelectedCandidatePair(local, remote);
+
+            // BUNDLE guard: the candidate's sdpMid is the ICE transport name.
+            // Stream uses max-bundle (a single transport); if a second distinct
+            // name ever shows up, the shared transport object can no longer
+            // represent the connection faithfully, so warn once.
+            const transportName = local?.sdpMid ?? remote?.sdpMid;
+
+            if (typeof transportName === 'string' && transportName.length > 0) {
+                this._seenTransportNames.add(transportName);
+
+                if (this._seenTransportNames.size > 1 && !this._multiTransportWarned) {
+                    this._multiTransportWarned = true;
+                    log.warn(
+                        `${this._pcId} multiple ICE transports detected (` +
+                        `${[ ...this._seenTransportNames ].join(', ')}); ` +
+                        'sender.transport / iceTransport assume BUNDLE (max-bundle) and reflect only one transport.'
+                    );
+                }
+            }
         });
 
         addListener(this, 'peerConnectionStateChanged', (ev: any) => {

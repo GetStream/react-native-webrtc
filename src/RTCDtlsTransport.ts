@@ -21,6 +21,12 @@ type RTCDtlsTransportEventMap = {
  * from the connection's `connectionState` and fires `statechange` when it
  * transitions.
  *
+ * Limitation: only the single bundled transport is modeled. With a
+ * `bundlePolicy` other than `max-bundle` (or a non-bundling peer) a connection
+ * can negotiate multiple transports; this object then represents only one of
+ * them, and every sender/receiver still reports it. `RTCPeerConnection` logs a
+ * warning if it detects more than one ICE transport at runtime.
+ *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/RTCDtlsTransport MDN}
  */
 export default class RTCDtlsTransport extends EventTarget<RTCDtlsTransportEventMap> {
