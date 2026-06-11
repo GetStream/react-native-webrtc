@@ -23,6 +23,13 @@
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule+VideoTrackAdapter.h"
 #import "WebRTCModule.h"
+
+// Import Swift-generated header to reach AudioDeviceModule
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
 #import "WebRTCModuleOptions.h"
 
 @implementation RTCPeerConnection (React)
@@ -88,58 +95,6 @@ static NSMutableDictionary<NSString *, RTCCertificate *> *gCertificates = nil;
 
 int _transceiverNextId = 0;
 
-- (nullable RTCRtpSender *)getSenderByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
-                                              senderId:(nonnull NSString *)senderId {
-    RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
-    if (!peerConnection) {
-        RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
-        return nil;
-    }
-    RTCRtpSender *sender = nil;
-    for (RTCRtpSender *s in peerConnection.senders) {
-        if ([senderId isEqual:s.senderId]) {
-            sender = s;
-            break;
-        }
-    }
-
-    return sender;
-}
-- (nullable RTCRtpReceiver *)getReceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
-                                                receiverId:(nonnull NSString *)receiverId {
-    RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
-    if (!peerConnection) {
-        RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
-        return nil;
-    }
-    RTCRtpReceiver *receiver = nil;
-    for (RTCRtpReceiver *r in peerConnection.receivers) {
-        if ([receiverId isEqual:r.receiverId]) {
-            receiver = r;
-            break;
-        }
-    }
-
-    return receiver;
-}
-
-- (nullable RTCRtpTransceiver *)getTransceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
-                                                   transceiverId:(nonnull NSString *)transceiverId {
-    RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
-    if (!peerConnection) {
-        RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
-        return nil;
-    }
-    RTCRtpTransceiver *transceiver = nil;
-    for (RTCRtpTransceiver *t in peerConnection.transceivers) {
-        if ([transceiverId isEqual:t.sender.senderId]) {
-            transceiver = t;
-            break;
-        }
-    }
-
-    return transceiver;
-}
 /*
  * This method is synchronous and blocking. This is done so we can implement createDataChannel
  * in the same way (synchronous) since the peer connection needs to exist before.
@@ -614,6 +569,16 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionAddTransceiver
             if (track && track.kind == kRTCMediaStreamTrackKindVideo && self.localTracks[trackId]) {
                 RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
                 [peerConnection addVideoTrackAdapter:videoTrack];
+            }
+
+            // Mirror a local audio track's enabled state to the ADM. On rejoin/SFU-migration the
+            // SDK republishes via addTransceiver on a fresh Publisher
+            if (track && [track.kind isEqualToString:@"audio"] && self.localTracks[trackId]) {
+                NSError *admError = nil;
+                if (![self.audioDeviceModule setMuted:!track.isEnabled error:&admError]) {
+                    NSLog(@"[WebRTCModule] Failed to sync ADM mute on audio addTransceiver: %@",
+                          admError.localizedDescription);
+                }
             }
         } else {
             RCTLogWarn(@"peerConnectionAddTransceiver() no type nor trackId provided in options");

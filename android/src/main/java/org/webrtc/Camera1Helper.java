@@ -51,4 +51,15 @@ public class Camera1Helper {
 
         return CameraEnumerationAndroid.getClosestSupportedSize(sizes, width, height);
     }
+
+    /** SENSOR_ORIENTATION (0/90/180/270), or -1 if it cannot be determined. */
+    public static int getSensorOrientation(int cameraId) {
+        try {
+            android.hardware.Camera.CameraInfo info = new android.hardware.Camera.CameraInfo();
+            android.hardware.Camera.getCameraInfo(cameraId, info);
+            return info.orientation;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
 }

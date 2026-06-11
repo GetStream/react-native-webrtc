@@ -36,7 +36,7 @@ import WebRTC
     }
 
     /// Events emitted as the underlying audio engine changes state.
-    enum Event: Equatable, CustomStringConvertible {
+    public enum Event: Equatable, CustomStringConvertible {
         /// Outbound audio surpassed the silence threshold.
         case speechActivityStarted
         /// Outbound audio dropped back to silence.
@@ -65,7 +65,7 @@ import WebRTC
             stereoPlayoutEnabled: Bool
         )
 
-        var description: String {
+        public var description: String {
             switch self {
             case .speechActivityStarted:
                 return ".speechActivityStarted"
@@ -174,7 +174,7 @@ import WebRTC
     /// Object that taps engine nodes and publishes audio level data.
     private var audioLevelsAdapter: AudioEngineNodeAdapting
     /// Public stream of `Event` values describing engine transitions.
-    let publisher: AnyPublisher<Event, Never>
+    public let publisher: AnyPublisher<Event, Never>
 
     /// Strong reference to the current engine so we can introspect it if needed.
     @objc public var engine: AVAudioEngine?
@@ -251,7 +251,6 @@ import WebRTC
     /// Reinitializes the ADM, clearing its internal audio graph state.
     @objc public func reset() {
         _ = source.reset()
-        _ = source.setMuteMode(.inputMixer)
     }
 
     /// Switches between stereo and mono playout while keeping the recording
@@ -264,7 +263,7 @@ import WebRTC
         /// means that for outputs where VP is disabled (e.g. stereo) we cannot mute/unmute.
         /// - `.restartEngine`: rebuilds the whole graph and requires explicit calling of
         /// `initAndStartRecording` .
-        // _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
+        _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
         /// - Important: We can probably set this one to false when the user doesn't have
         /// sendAudio capability.
         _ = source.setRecordingAlwaysPreparedMode(false)
@@ -355,10 +354,10 @@ import WebRTC
     ) {
         switch speechActivityEvent {
         case .started:
-            NSLog("[Callingx | AudioDeviceModule] speechActivityStarted")
+            NSLog("[AudioDeviceModule] speechActivityStarted")
             subject.send(.speechActivityStarted)
         case .ended:
-            NSLog("[Callingx | AudioDeviceModule] speechActivityEnded")
+            NSLog("[AudioDeviceModule] speechActivityEnded")
             subject.send(.speechActivityEnded)
         @unknown default:
             break

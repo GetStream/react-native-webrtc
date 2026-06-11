@@ -24,7 +24,6 @@ const NATIVE_EVENTS = [
     'mediaStreamTrackMuteChanged',
     'videoTrackDimensionChanged',
     'mediaStreamTrackEnded',
-    'frameCryptionStateChanged',
 ];
 
 const eventEmitter = new EventEmitter();

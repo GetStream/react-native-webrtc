@@ -4,6 +4,7 @@ import { deepClone } from './RTCUtil';
 
 type DegradationPreferenceType = 'maintain-framerate'
     | 'maintain-resolution'
+    | 'maintain-framerate-and-resolution'
     | 'balanced'
     | 'disabled'
 
@@ -14,13 +15,13 @@ type DegradationPreferenceType = 'maintain-framerate'
  */
 class DegradationPreference {
     static fromNative(nativeFormat: string): DegradationPreferenceType {
-        const stringFormat = nativeFormat.toLowerCase().replace('_', '-');
+        const stringFormat = nativeFormat.toLowerCase().replace(/_/g, '-');
 
         return stringFormat as DegradationPreferenceType;
     }
 
     static toNative(format: DegradationPreferenceType): string {
-        return format.toUpperCase().replace('-', '_');
+        return format.toUpperCase().replace(/-/g, '_');
     }
 }
 

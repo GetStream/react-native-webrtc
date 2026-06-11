@@ -16,6 +16,7 @@
 
 package org.webrtc;
 
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 
 import androidx.annotation.Nullable;
@@ -48,5 +49,17 @@ public class Camera2Helper {
         }
 
         return CameraEnumerationAndroid.getClosestSupportedSize(sizes, width, height);
+    }
+
+    /** SENSOR_ORIENTATION (0/90/180/270), or -1 if it cannot be determined. */
+    public static int getSensorOrientation(CameraManager cameraManager, @Nullable String cameraId) {
+        try {
+            Integer orientation = cameraManager
+                    .getCameraCharacteristics(cameraId)
+                    .get(CameraCharacteristics.SENSOR_ORIENTATION);
+            return orientation == null ? -1 : orientation;
+        } catch (Exception e) {
+            return -1;
+        }
     }
 }

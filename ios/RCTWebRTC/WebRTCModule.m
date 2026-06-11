@@ -61,13 +61,15 @@
         NSDictionary *fieldTrials = options.fieldTrials;
         RTCLoggingSeverity loggingSeverity = options.loggingSeverity;
 
-        // Initialize field trials.
-        if (fieldTrials == nil) {
-            // Fix for dual-sim connectivity:
-            // https://bugs.chromium.org/p/webrtc/issues/detail?id=10966
-            fieldTrials = @{kRTCFieldTrialUseNWPathMonitor : kRTCFieldTrialEnabledValue};
-        }
-        RTCInitFieldTrialDictionary(fieldTrials);
+        // Temporarily disable field trials
+        // this supposedly makes libwebrtc promptly detect wifi↔cellular route changes and reset the send-side BWE — and never enables WebRTC-Bwe-SafeResetOnRouteChange
+        // // Initialize field trials.
+        // if (fieldTrials == nil) {
+        //     // Fix for dual-sim connectivity:
+        //     // https://bugs.chromium.org/p/webrtc/issues/detail?id=10966
+        //     fieldTrials = @{kRTCFieldTrialUseNWPathMonitor : kRTCFieldTrialEnabledValue};
+        // }
+        // RTCInitFieldTrialDictionary(fieldTrials);
 
         // Initialize logging.
         RTCSetMinDebugLogLevel(loggingSeverity);
@@ -124,6 +126,8 @@
                                                                  decoderFactory:decoderFactory
                                                           audioProcessingModule:nil];
         }
+        
+        _peerConnectionFactory.frameBufferPolicy = RTCFrameBufferPolicyCopyToNV12;
 
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
         _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
@@ -132,10 +136,6 @@
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
         _localTracks = [NSMutableDictionary new];
-
-        _frameCryptors = [NSMutableDictionary new];
-        _keyProviders = [NSMutableDictionary new];
-        _dataPacketCryptors = [NSMutableDictionary new];
 
         dispatch_queue_attr_t attributes =
             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
@@ -208,7 +208,6 @@ RCT_EXPORT_MODULE();
         kEventMediaStreamTrackEnded,
         kEventPeerConnectionOnRemoveTrack,
         kEventPeerConnectionOnTrack,
-        kEventFrameCryptionStateChanged,
         kEventAudioDeviceModuleSpeechActivity,
         kEventAudioDeviceModuleEngineCreated,
         kEventAudioDeviceModuleEngineWillEnable,
