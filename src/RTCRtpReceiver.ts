@@ -1,6 +1,7 @@
 import { NativeModules } from 'react-native';
 
 import MediaStreamTrack from './MediaStreamTrack';
+import RTCDtlsTransport from './RTCDtlsTransport';
 import RTCRtpCapabilities from './RTCRtpCapabilities';
 import { RTCRtpParametersInit } from './RTCRtpParameters';
 import RTCRtpReceiveParameters from './RTCRtpReceiveParameters';
@@ -12,16 +13,19 @@ export default class RTCRtpReceiver {
     _peerConnectionId: number;
     _track: MediaStreamTrack | null = null;
     _rtpParameters: RTCRtpReceiveParameters;
+    _transport: RTCDtlsTransport | null = null;
 
     constructor(info: {
         peerConnectionId: number,
         id: string,
         track?: MediaStreamTrack,
-        rtpParameters: RTCRtpParametersInit
+        rtpParameters: RTCRtpParametersInit,
+        transport?: RTCDtlsTransport | null
     }) {
         this._id = info.id;
         this._peerConnectionId = info.peerConnectionId;
         this._rtpParameters = new RTCRtpReceiveParameters(info.rtpParameters);
+        this._transport = info.transport ?? null;
 
         if (info.track) {
             this._track = info.track;
@@ -56,5 +60,15 @@ export default class RTCRtpReceiver {
 
     get track() {
         return this._track;
+    }
+
+    /**
+     * The DTLS transport over which media for this receiver is received. With
+     * BUNDLE (always used by Stream) this is the single transport shared by the
+     * whole RTCPeerConnection. Null until the receiver is created by a connection.
+     * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/RTCRtpReceiver/transport MDN}
+     */
+    get transport(): RTCDtlsTransport | null {
+        return this._transport;
     }
 }

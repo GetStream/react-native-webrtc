@@ -12,6 +12,7 @@ import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 
 import org.webrtc.AudioTrack;
+import org.webrtc.CandidatePairChangeEvent;
 import org.webrtc.DataChannel;
 import org.webrtc.IceCandidate;
 import org.webrtc.MediaStream;
@@ -321,6 +322,35 @@ class PeerConnectionObserver implements PeerConnection.Observer {
 
     @Override
     public void onIceCandidatesRemoved(final IceCandidate[] candidates) {}
+
+    // Serializes an IceCandidate into the same shape used by the
+    // peerConnectionGotICECandidate event, returning null for a nil candidate so
+    // the JS side receives `null`.
+    private WritableMap serializeIceCandidate(IceCandidate candidate) {
+        if (candidate == null) {
+            return null;
+        }
+
+        WritableMap candidateParams = Arguments.createMap();
+        candidateParams.putInt("sdpMLineIndex", candidate.sdpMLineIndex);
+        candidateParams.putString("sdpMid", candidate.sdpMid);
+        candidateParams.putString("candidate", candidate.sdp);
+        return candidateParams;
+    }
+
+    @Override
+    public void onSelectedCandidatePairChanged(CandidatePairChangeEvent event) {
+        ThreadUtils.runOnExecutor(() -> {
+            WritableMap params = Arguments.createMap();
+            params.putInt("pcId", id);
+            params.putMap("local", serializeIceCandidate(event.local));
+            params.putMap("remote", serializeIceCandidate(event.remote));
+            params.putInt("lastDataReceivedMs", event.lastDataReceivedMs);
+            params.putString("reason", event.reason);
+
+            webRTCModule.sendEvent("peerConnectionSelectedCandidatePairChanged", params);
+        });
+    }
 
     @Override
     public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {

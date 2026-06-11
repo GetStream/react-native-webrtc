@@ -199,6 +199,7 @@ RCT_EXPORT_MODULE();
         kEventPeerConnectionIceConnectionChanged,
         kEventPeerConnectionIceGatheringChanged,
         kEventPeerConnectionGotICECandidate,
+        kEventPeerConnectionSelectedCandidatePairChanged,
         kEventPeerConnectionDidOpenDataChannel,
         kEventDataChannelDidChangeBufferedAmount,
         kEventDataChannelStateChanged,

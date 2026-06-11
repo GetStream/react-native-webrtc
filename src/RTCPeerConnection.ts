@@ -8,8 +8,10 @@ import MediaStreamTrackEvent from './MediaStreamTrackEvent';
 import RTCCertificate from './RTCCertificate';
 import RTCDataChannel from './RTCDataChannel';
 import RTCDataChannelEvent from './RTCDataChannelEvent';
+import RTCDtlsTransport, { RTCDtlsTransportState } from './RTCDtlsTransport';
 import RTCIceCandidate from './RTCIceCandidate';
 import RTCIceCandidateEvent from './RTCIceCandidateEvent';
+import RTCIceTransport from './RTCIceTransport';
 import RTCRtpReceiveParameters from './RTCRtpReceiveParameters';
 import RTCRtpReceiver from './RTCRtpReceiver';
 import RTCRtpSendParameters from './RTCRtpSendParameters';
@@ -76,6 +78,18 @@ type RTCPeerConnectionEventMap = {
     error: Event<'error'>
 }
 
+// Best-effort mapping from RTCPeerConnection.connectionState to
+// RTCDtlsTransport.state. The native binaries don't expose a real DTLS
+// transport state, so we derive it from the aggregate connection state.
+const DTLS_TRANSPORT_STATE: Record<RTCPeerConnectionState, RTCDtlsTransportState> = {
+    'new': 'new',
+    'connecting': 'connecting',
+    'connected': 'connected',
+    'disconnected': 'connecting',
+    'failed': 'failed',
+    'closed': 'closed',
+};
+
 let nextPeerConnectionId = 0;
 
 export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEventMap> {
@@ -94,6 +108,12 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
     // constructed (can happen on fast/loopback connections). Drained when the
     // remote track is created in setRemoteDescription.
     _pendingMuteStates: Map<string, boolean>;
+
+    // Single shared ICE/DTLS transport for this connection. Stream always uses
+    // BUNDLE, so one transport pair represents every sender/receiver. Fed from
+    // the peer-connection-level native events in _registerEvents().
+    _iceTransport: RTCIceTransport;
+    _dtlsTransport: RTCDtlsTransport;
 
     static generateCertificate(
         keygenAlgorithm: string | {
@@ -178,6 +198,8 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         this._remoteStreams = new Map();
         this._pendingTrackEvents = [];
         this._pendingMuteStates = new Map();
+        this._iceTransport = new RTCIceTransport();
+        this._dtlsTransport = new RTCDtlsTransport(this._iceTransport);
 
         this._registerEvents();
 
@@ -277,10 +299,14 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
 
         newTransceivers?.forEach(t => {
             const { transceiverOrder, transceiver } = t;
-            const newSender = new RTCRtpSender({ ...transceiver.sender, track: null });
+            const newSender = new RTCRtpSender({ ...transceiver.sender, track: null, transport: this._dtlsTransport });
             const remoteTrack
                 = transceiver.receiver.track ? new MediaStreamTrack(transceiver.receiver.track) : null;
-            const newReceiver = new RTCRtpReceiver({ ...transceiver.receiver, track: remoteTrack });
+            const newReceiver = new RTCRtpReceiver({
+                ...transceiver.receiver,
+                track: remoteTrack,
+                transport: this._dtlsTransport,
+            });
             const newTransceiver = new RTCRtpTransceiver({
                 ...transceiver,
                 sender: newSender,
@@ -376,7 +402,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
 
         newTransceivers?.forEach(t => {
             const { transceiverOrder, transceiver } = t;
-            const newSender = new RTCRtpSender({ ...transceiver.sender, track: null });
+            const newSender = new RTCRtpSender({ ...transceiver.sender, track: null, transport: this._dtlsTransport });
             const remoteTrack
                 = transceiver.receiver.track ? new MediaStreamTrack(transceiver.receiver.track) : null;
 
@@ -392,7 +418,11 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
                 }
             }
 
-            const newReceiver = new RTCRtpReceiver({ ...transceiver.receiver, track: remoteTrack });
+            const newReceiver = new RTCRtpReceiver({
+                ...transceiver.receiver,
+                track: remoteTrack,
+                transport: this._dtlsTransport,
+            });
             const newTransceiver = new RTCRtpTransceiver({
                 ...transceiver,
                 sender: newSender,
@@ -548,9 +578,13 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         }
 
         // This is a new transceiver, should create a transceiver for it and add it
-        const newSender = new RTCRtpSender({ ...transceiver.sender, track });
+        const newSender = new RTCRtpSender({ ...transceiver.sender, track, transport: this._dtlsTransport });
         const remoteTrack = transceiver.receiver.track ? new MediaStreamTrack(transceiver.receiver.track) : null;
-        const newReceiver = new RTCRtpReceiver({ ...transceiver.receiver, track: remoteTrack });
+        const newReceiver = new RTCRtpReceiver({
+            ...transceiver.receiver,
+            track: remoteTrack,
+            transport: this._dtlsTransport,
+        });
         const newTransceiver = new RTCRtpTransceiver({
             ...transceiver,
             sender: newSender,
@@ -598,9 +632,13 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             track = source;
         }
 
-        const sender = new RTCRtpSender({ ...t.sender, track });
+        const sender = new RTCRtpSender({ ...t.sender, track, transport: this._dtlsTransport });
         const remoteTrack = t.receiver.track ? new MediaStreamTrack(t.receiver.track) : null;
-        const receiver = new RTCRtpReceiver({ ...t.receiver, track: remoteTrack });
+        const receiver = new RTCRtpReceiver({
+            ...t.receiver,
+            track: remoteTrack,
+            transport: this._dtlsTransport,
+        });
         const transceiver = new RTCRtpTransceiver({
             ...result.transceiver,
             sender,
@@ -730,8 +768,27 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this.iceConnectionState = ev.iceConnectionState;
+            this._iceTransport._setState(ev.iceConnectionState);
 
             this.dispatchEvent(new Event('iceconnectionstatechange'));
+        });
+
+        addListener(this, 'peerConnectionSelectedCandidatePairChanged', (ev: any) => {
+            if (ev.pcId !== this._pcId) {
+                return;
+            }
+
+            let local: RTCIceCandidate | null = null;
+            let remote: RTCIceCandidate | null = null;
+
+            try {
+                local = ev.local ? new RTCIceCandidate(ev.local) : null;
+                remote = ev.remote ? new RTCIceCandidate(ev.remote) : null;
+            } catch (e) {
+                log.debug(`${this._pcId} selectedcandidatepairchange: failed to parse candidates: ${e}`);
+            }
+
+            this._iceTransport._setSelectedCandidatePair(local, remote);
         });
 
         addListener(this, 'peerConnectionStateChanged', (ev: any) => {
@@ -740,6 +797,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this.connectionState = ev.connectionState;
+            this._dtlsTransport._setState(DTLS_TRANSPORT_STATE[ev.connectionState]);
 
             this.dispatchEvent(new Event('connectionstatechange'));
 
@@ -833,6 +891,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this.iceGatheringState = ev.iceGatheringState;
+            this._iceTransport._setGatheringState(ev.iceGatheringState);
 
             if (this.iceGatheringState === 'complete') {
                 const sdpInfo = ev.sdp;
