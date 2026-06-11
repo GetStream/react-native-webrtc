@@ -21,9 +21,6 @@ jobs:
 
     - uses: ./.github/actions/setup-node
 
-    - name: Install node modules
-      run: npm install
-
     - name: Install example node modules
       run: npm install
       working-directory: ./examples/GumTestApp/

@@ -23,9 +23,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pods-
 
-    - name: Install node modules
-      run: npm install
-
     - name: Install example node modules
       working-directory: ./examples/GumTestApp/
       run: npm install
