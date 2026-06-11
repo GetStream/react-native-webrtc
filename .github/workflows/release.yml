@@ -26,6 +26,8 @@ jobs:
       - uses: ./.github/actions/setup-node
 
       - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
           npx semantic-release
           ${{ inputs.dry_run && '--dry-run' || '' }}
