@@ -264,9 +264,9 @@ import WebRTC
         /// - `.restartEngine`: rebuilds the whole graph and requires explicit calling of
         /// `initAndStartRecording` .
         _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
-        /// - Important: We can probably set this one to false when the user doesn't have
-        /// sendAudio capability.
-        _ = source.setRecordingAlwaysPreparedMode(false)
+        if isPreferred {
+            _ = source.setRecordingAlwaysPreparedMode(false)
+        }
         source.prefersStereoPlayout = isPreferred
         source.isVoiceProcessingBypassed = isPreferred
     }
