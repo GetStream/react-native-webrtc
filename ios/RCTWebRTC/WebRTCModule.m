@@ -8,6 +8,7 @@
 #import <React/RCTUtils.h>
 
 #import "AudioDeviceModuleObserver.h"
+#import "RTCCameraPreviewViewManager.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
@@ -143,6 +144,14 @@
     }
 
     return self;
+}
+
+- (CaptureController *)adoptActiveCameraPreviewForSource:(RTCVideoSource *)source {
+    id<RTCCameraPreviewControl> preview = self.activeCameraPreview;
+    if (preview) {
+        return [preview adoptCaptureForSource:source];
+    }
+    return nil;
 }
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag {

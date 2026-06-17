@@ -61,6 +61,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     private final GetUserMediaImpl getUserMediaImpl;
     private SpeechActivityDetector speechActivityDetector;
 
+    @Nullable
+    private RTCCameraPreviewView activeCameraPreview;
+
     public WebRTCModule(ReactApplicationContext reactContext) {
         super(reactContext);
 
@@ -304,6 +307,21 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     public GetUserMediaImpl getUserMediaImpl() {
         return getUserMediaImpl;
+    }
+
+    void setActiveCameraPreview(RTCCameraPreviewView preview) {
+        this.activeCameraPreview = preview;
+    }
+
+    void clearActiveCameraPreview(RTCCameraPreviewView preview) {
+        if (this.activeCameraPreview == preview) {
+            this.activeCameraPreview = null;
+        }
+    }
+
+    @Nullable
+    RTCCameraPreviewView getActiveCameraPreview() {
+        return this.activeCameraPreview;
     }
 
     public PeerConnectionObserver getPeerConnectionObserver(int id) {

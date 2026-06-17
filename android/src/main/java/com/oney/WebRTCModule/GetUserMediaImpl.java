@@ -251,10 +251,20 @@ public class GetUserMediaImpl {
                 return;
             }
 
-            CameraCaptureController cameraCaptureController =
-                    new CameraCaptureController(currentActivity, getCameraEnumerator(), videoConstraintsMap);
+            // If a lobby camera preview is already running, adopt its camera session by routing its
+            // frames into this track's source; the camera keeps running. Falls back to creating a
+            // fresh capturer when there's no preview to adopt.
+            RTCCameraPreviewView preview = webRTCModule.getActiveCameraPreview();
+            if (preview != null) {
+                videoTrack = createVideoTrackFromPreview(preview, videoConstraintsMap);
+            }
 
-            videoTrack = createVideoTrack(cameraCaptureController);
+            if (videoTrack == null) {
+                CameraCaptureController cameraCaptureController =
+                        new CameraCaptureController(currentActivity, getCameraEnumerator(), videoConstraintsMap);
+
+                videoTrack = createVideoTrack(cameraCaptureController);
+            }
         }
 
         if (audioTrack == null && videoTrack == null) {
@@ -532,6 +542,52 @@ public class GetUserMediaImpl {
                 new TrackPrivate(track, videoSource, videoCaptureController, surfaceTextureHelper, localTrackAdapter));
 
         videoCaptureController.startCapture();
+
+        return track;
+    }
+
+    /**
+     * Creates a camera video track by adopting an already-running lobby preview's camera session.
+     * The preview's capturer / surface texture helper / controller are reused as-is (already
+     * initialized and capturing); this track's {@link VideoSource} is attached as the downstream of
+     * the preview's {@link FanoutCapturerObserver}, so the camera is never stopped or reopened.
+     *
+     * @return the new video track, or null if the preview had nothing running to adopt (caller
+     *         should then fall back to creating a fresh capturer).
+     */
+    VideoTrack createVideoTrackFromPreview(RTCCameraPreviewView preview, ReadableMap videoConstraintsMap) {
+        RTCCameraPreviewView.PreviewHandoff handoff = preview.yieldForAdoption();
+        if (handoff == null) {
+            return null;
+        }
+
+        PeerConnectionFactory pcFactory = webRTCModule.mFactory;
+        String id = UUID.randomUUID().toString();
+
+        TrackCapturerEventsEmitter eventsEmitter = new TrackCapturerEventsEmitter(webRTCModule, id);
+        handoff.controller.setCapturerEventsListener(eventsEmitter);
+
+        VideoSource videoSource = pcFactory.createVideoSource(false);
+        // Route the running capturer's frames into this track's source (in addition to the preview).
+        handoff.fanout.setDownstream(videoSource.getCapturerObserver());
+
+        VideoTrack track = pcFactory.createVideoTrack(id, videoSource);
+
+        VideoTrackAdapter localTrackAdapter = new VideoTrackAdapter(webRTCModule, -1);
+        localTrackAdapter.addDimensionDetector(track);
+
+        track.setEnabled(true);
+        // Reuse the preview's controller + surface texture helper; the capturer is already running,
+        // so do NOT call startCapture again.
+        tracks.put(id,
+                new TrackPrivate(track, videoSource, handoff.controller, handoff.surfaceTextureHelper,
+                        localTrackAdapter));
+
+        // Reconcile to the call's requested constraints. CameraCaptureController.applyConstraints
+        // only acts on a delta
+        if (videoConstraintsMap != null) {
+            handoff.controller.applyConstraints(videoConstraintsMap, null);
+        }
 
         return track;
     }

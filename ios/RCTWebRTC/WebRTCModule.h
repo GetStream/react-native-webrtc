@@ -34,6 +34,9 @@ static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
     @"audioDeviceModuleAudioProcessingStateUpdated";
 
 @class AudioDeviceModule;
+@class CaptureController;
+
+@protocol RTCCameraPreviewControl;
 
 @interface WebRTCModule : RCTEventEmitter<RCTBridgeModule>
 
@@ -47,6 +50,10 @@ static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
 @property(nonatomic, strong) NSMutableDictionary<NSNumber *, RTCPeerConnection *> *peerConnections;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStream *> *localStreams;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStreamTrack *> *localTracks;
+
+@property(nonatomic, weak) id<RTCCameraPreviewControl> activeCameraPreview;
+
+- (CaptureController *)adoptActiveCameraPreviewForSource:(RTCVideoSource *)source;
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 

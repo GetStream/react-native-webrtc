@@ -28,6 +28,7 @@ import RTCRtpSendParameters, { type RTCRtpSendParametersInit } from './RTCRtpSen
 import RTCRtpSender from './RTCRtpSender';
 import RTCRtpTransceiver from './RTCRtpTransceiver';
 import RTCSessionDescription from './RTCSessionDescription';
+import RTCCameraPreviewView from './RTCCameraPreviewView';
 import RTCView from './RTCView';
 import ScreenCapturePickerView from './ScreenCapturePickerView';
 
@@ -45,6 +46,7 @@ export {
     RTCSessionDescription,
     RTCCertificate,
     RTCView,
+    RTCCameraPreviewView,
     ScreenCapturePickerView,
     RTCRtpEncodingParameters,
     RTCRtpTransceiver,
