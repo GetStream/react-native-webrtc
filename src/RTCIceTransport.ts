@@ -13,8 +13,8 @@ export type RTCIceTransportState =
 export type RTCIceGathererState = 'new' | 'gathering' | 'complete';
 
 export type RTCIceCandidatePair = {
-    local: RTCIceCandidate | null,
-    remote: RTCIceCandidate | null
+    local: RTCIceCandidate,
+    remote: RTCIceCandidate
 };
 
 type RTCIceTransportEventMap = {
@@ -85,6 +85,28 @@ export default class RTCIceTransport extends EventTarget<RTCIceTransportEventMap
      * selected candidate pair change. Not part of the public API.
      */
     _setSelectedCandidatePair(local: RTCIceCandidate | null, remote: RTCIceCandidate | null): void {
+        // W3C getSelectedCandidatePair() is all-or-nothing and, once set, "will
+        // always be available from that time forward" — it never reverts to
+        // null. libwebrtc can fire a transient mid-transition event with only
+        // one side resolved; ignore those so we never expose (or clobber an
+        // existing pair with) a half-populated pair.
+        if (!local || !remote) {
+            return;
+        }
+
+        // The spec fires selectedcandidatepairchange only when a *different*
+        // pair is selected. Native re-fires this callback as lastDataReceivedMs
+        // updates with the same pair, so skip when nothing actually changed.
+        const current = this._selectedCandidatePair;
+
+        if (current
+            && current.local.candidate === local.candidate
+            && current.local.sdpMid === local.sdpMid
+            && current.remote.candidate === remote.candidate
+            && current.remote.sdpMid === remote.sdpMid) {
+            return;
+        }
+
         this._selectedCandidatePair = { local, remote };
         this.dispatchEvent(new Event('selectedcandidatepairchange'));
     }
