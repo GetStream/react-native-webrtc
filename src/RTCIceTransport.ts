@@ -27,10 +27,11 @@ type RTCIceTransportEventMap = {
  * Partial implementation of the W3C `RTCIceTransport` interface.
  *
  * This fork's WebRTC binaries do not expose the native ICE transport object, so
- * there is no per-transport native handle to bridge. Because Stream always uses
- * BUNDLE, a single ICE transport is shared by the whole `RTCPeerConnection`;
- * the owning connection owns one instance of this class and feeds it from the
- * peer-connection-level `peerConnectionSelectedCandidatePairChanged` event.
+ * there is no per-transport native handle to bridge. Under `max-bundle` a
+ * single ICE transport is shared by the whole `RTCPeerConnection`; the owning
+ * connection owns one instance of this class (created only for `max-bundle`
+ * connections) and feeds it from the peer-connection-level
+ * `peerConnectionSelectedCandidatePairChanged` event.
  *
  * `state` and `gatheringState` are best-effort values derived from the
  * connection's ICE state; they fire `statechange` / `gatheringstatechange`

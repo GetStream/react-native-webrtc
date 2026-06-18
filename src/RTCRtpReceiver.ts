@@ -63,9 +63,11 @@ export default class RTCRtpReceiver {
     }
 
     /**
-     * The DTLS transport over which media for this receiver is received. With
-     * BUNDLE (always used by Stream) this is the single transport shared by the
-     * whole RTCPeerConnection. Null until the receiver is created by a connection.
+     * The DTLS transport over which media for this receiver is received. Under
+     * `max-bundle` this is the single transport shared by the whole
+     * RTCPeerConnection. Null when the receiver has no connection yet, or when
+     * the connection uses a non-`max-bundle` policy (where a single shared
+     * transport cannot be represented faithfully).
      * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/RTCRtpReceiver/transport MDN}
      */
     get transport(): RTCDtlsTransport | null {

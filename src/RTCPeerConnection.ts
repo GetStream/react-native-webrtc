@@ -109,18 +109,15 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
     // remote track is created in setRemoteDescription.
     _pendingMuteStates: Map<string, boolean>;
 
-    // Single shared ICE/DTLS transport for this connection. Stream always uses
-    // BUNDLE, so one transport pair represents every sender/receiver. Fed from
-    // the peer-connection-level native events in _registerEvents().
-    _iceTransport: RTCIceTransport;
-    _dtlsTransport: RTCDtlsTransport;
-
-    // BUNDLE-assumption guard: distinct ICE transport names (the candidate's
-    // sdpMid / transport_name) observed via selectedcandidatepairchange. More
-    // than one means the connection negotiated multiple transports, which the
-    // single shared transport pair above cannot represent faithfully.
-    _seenTransportNames: Set<string> = new Set();
-    _multiTransportWarned = false;
+    // Single shared ICE/DTLS transport pair for this connection. Created only
+    // when the connection is negotiated with `bundlePolicy: 'max-bundle'`, where
+    // one transport pair provably represents every sender/receiver. For any
+    // other policy a connection may negotiate multiple transports that a single
+    // shared pair cannot represent, so the transport API is left unexposed
+    // (null) rather than reporting a pair that could belong to another path.
+    // Fed from the peer-connection-level native events in _registerEvents().
+    _iceTransport: RTCIceTransport | null = null;
+    _dtlsTransport: RTCDtlsTransport | null = null;
 
     static generateCertificate(
         keygenAlgorithm: string | {
@@ -205,8 +202,15 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
         this._remoteStreams = new Map();
         this._pendingTrackEvents = [];
         this._pendingMuteStates = new Map();
-        this._iceTransport = new RTCIceTransport();
-        this._dtlsTransport = new RTCDtlsTransport(this._iceTransport);
+
+        // Expose the transport API only under max-bundle, where a single shared
+        // transport pair faithfully represents the whole connection. Other
+        // policies can negotiate multiple transports, so sender/receiver
+        // `transport` stays null rather than reporting a possibly-wrong pair.
+        if (configuration?.bundlePolicy === 'max-bundle') {
+            this._iceTransport = new RTCIceTransport();
+            this._dtlsTransport = new RTCDtlsTransport(this._iceTransport);
+        }
 
         this._registerEvents();
 
@@ -775,7 +779,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this.iceConnectionState = ev.iceConnectionState;
-            this._iceTransport._setState(ev.iceConnectionState);
+            this._iceTransport?._setState(ev.iceConnectionState);
 
             this.dispatchEvent(new Event('iceconnectionstatechange'));
         });
@@ -795,26 +799,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
                 log.debug(`${this._pcId} selectedcandidatepairchange: failed to parse candidates: ${e}`);
             }
 
-            this._iceTransport._setSelectedCandidatePair(local, remote);
-
-            // BUNDLE guard: the candidate's sdpMid is the ICE transport name.
-            // Stream uses max-bundle (a single transport); if a second distinct
-            // name ever shows up, the shared transport object can no longer
-            // represent the connection faithfully, so warn once.
-            const transportName = local?.sdpMid ?? remote?.sdpMid;
-
-            if (typeof transportName === 'string' && transportName.length > 0) {
-                this._seenTransportNames.add(transportName);
-
-                if (this._seenTransportNames.size > 1 && !this._multiTransportWarned) {
-                    this._multiTransportWarned = true;
-                    log.warn(
-                        `${this._pcId} multiple ICE transports detected (` +
-                        `${[ ...this._seenTransportNames ].join(', ')}); ` +
-                        'sender.transport / iceTransport assume BUNDLE (max-bundle) and reflect only one transport.'
-                    );
-                }
-            }
+            this._iceTransport?._setSelectedCandidatePair(local, remote);
         });
 
         addListener(this, 'peerConnectionStateChanged', (ev: any) => {
@@ -823,7 +808,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this.connectionState = ev.connectionState;
-            this._dtlsTransport._setState(DTLS_TRANSPORT_STATE[ev.connectionState]);
+            this._dtlsTransport?._setState(DTLS_TRANSPORT_STATE[ev.connectionState]);
 
             this.dispatchEvent(new Event('connectionstatechange'));
 
@@ -917,7 +902,7 @@ export default class RTCPeerConnection extends EventTarget<RTCPeerConnectionEven
             }
 
             this.iceGatheringState = ev.iceGatheringState;
-            this._iceTransport._setGatheringState(ev.iceGatheringState);
+            this._iceTransport?._setGatheringState(ev.iceGatheringState);
 
             if (this.iceGatheringState === 'complete') {
                 const sdpInfo = ev.sdp;

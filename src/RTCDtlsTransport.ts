@@ -11,21 +11,21 @@ type RTCDtlsTransportEventMap = {
  * Partial implementation of the W3C `RTCDtlsTransport` interface.
  *
  * This fork's WebRTC binaries do not expose the native DTLS transport object,
- * so this class is a thin JS wrapper. Because Stream always uses BUNDLE, a
- * single DTLS transport is shared by the whole `RTCPeerConnection`; the owning
- * connection creates one instance and hands it to every sender/receiver via
- * their `transport` property.
+ * so this class is a thin JS wrapper. Under `max-bundle` a single DTLS
+ * transport is shared by the whole `RTCPeerConnection`; the owning connection
+ * creates one instance and hands it to every sender/receiver via their
+ * `transport` property.
  *
  * The primary purpose is to expose `iceTransport`, which carries the
  * `selectedcandidatepairchange` event. `state` is a best-effort value derived
  * from the connection's `connectionState` and fires `statechange` when it
  * transitions.
  *
- * Limitation: only the single bundled transport is modeled. With a
- * `bundlePolicy` other than `max-bundle` (or a non-bundling peer) a connection
- * can negotiate multiple transports; this object then represents only one of
- * them, and every sender/receiver still reports it. `RTCPeerConnection` logs a
- * warning if it detects more than one ICE transport at runtime.
+ * Limitation: only the single bundled transport is modeled, so the owning
+ * `RTCPeerConnection` creates this object only when negotiated with
+ * `bundlePolicy: 'max-bundle'`. Under any other policy a connection can
+ * negotiate multiple transports that a single shared pair cannot represent, so
+ * sender/receiver `transport` is left null instead of reporting a wrong pair.
  *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/RTCDtlsTransport MDN}
  */

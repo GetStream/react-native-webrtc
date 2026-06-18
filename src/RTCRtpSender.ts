@@ -81,9 +81,11 @@ export default class RTCRtpSender {
     }
 
     /**
-     * The DTLS transport over which media from this sender is sent. With BUNDLE
-     * (always used by Stream) this is the single transport shared by the whole
-     * RTCPeerConnection. Null until the sender is created by a connection.
+     * The DTLS transport over which media from this sender is sent. Under
+     * `max-bundle` this is the single transport shared by the whole
+     * RTCPeerConnection. Null when the sender has no connection yet, or when the
+     * connection uses a non-`max-bundle` policy (where a single shared transport
+     * cannot be represented faithfully).
      * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/RTCRtpSender/transport MDN}
      */
     get transport(): RTCDtlsTransport | null {
