@@ -1,6 +1,5 @@
 package com.oney.WebRTCModule;
 
-import android.os.Build;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -26,13 +25,7 @@ import com.oney.WebRTCModule.webrtcutils.SelectiveVideoDecoderFactory;
 
 import org.webrtc.*;
 import org.webrtc.audio.AudioDeviceModule;
-import org.webrtc.audio.JavaAudioDeviceModule;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -46,10 +39,18 @@ import java.util.concurrent.ExecutionException;
 public class WebRTCModule extends ReactContextBaseJavaModule {
     static final String TAG = WebRTCModule.class.getCanonicalName();
 
-    PeerConnectionFactory mFactory;
+    // Shared across every per-call PeerConnectionFactory and also used to read codec capabilities.
     VideoEncoderFactory mVideoEncoderFactory;
     VideoDecoderFactory mVideoDecoderFactory;
-    AudioDeviceModule mAudioDeviceModule;
+
+    // Owns the per-call factories + the lazy default, and routes PCs/tracks/streams to their factory.
+    final PeerConnectionFactoryRegistry factoryRegistry;
+
+    // Build inputs captured at module init and reused for every factory built later.
+    @Nullable
+    private AudioProcessingFactory audioProcessingFactory;
+    @Nullable
+    private AudioDeviceModule injectedAudioDeviceModule;
 
     // Need to expose the peer connection codec factories here to get capabilities
     private final SparseArray<PeerConnectionObserver> mPeerConnectionObservers;
@@ -59,7 +60,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     private static final Map<String, RtcCertificatePem> mCertificates = new HashMap<>();
 
     private final GetUserMediaImpl getUserMediaImpl;
-    private SpeechActivityDetector speechActivityDetector;
 
     @Nullable
     private RTCCameraPreviewView activeCameraPreview;
@@ -72,7 +72,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
         WebRTCModuleOptions options = WebRTCModuleOptions.getInstance();
 
-        AudioDeviceModule adm = options.audioDeviceModule;
         VideoEncoderFactory encoderFactory = options.videoEncoderFactory;
         VideoDecoderFactory decoderFactory = options.videoDecoderFactory;
         Loggable injectableLogger = options.injectableLogger;
@@ -81,12 +80,11 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         String fieldTrials = options.fieldTrials;
 
         PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions
-                                                 .builder(reactContext)
-
-                                                 .setFieldTrials(fieldTrials)
-                                                 .setNativeLibraryLoader(new LibraryLoader())
-                                                 .setInjectableLogger(injectableLogger, loggingSeverity)
-                                                 .createInitializationOptions());
+                .builder(reactContext)
+                .setFieldTrials(fieldTrials)
+                .setNativeLibraryLoader(new LibraryLoader())
+                .setInjectableLogger(injectableLogger, loggingSeverity)
+                .createInitializationOptions());
 
         if (injectableLogger == null && loggingSeverity != null) {
             Logging.enableLogToDebugOutput(loggingSeverity);
@@ -100,11 +98,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             decoderFactory = new SelectiveVideoDecoderFactory(eglContext, false, Arrays.asList("VP9", "AV1"));
         }
 
-        if (adm == null) {
-            adm = createAudioDeviceModule(reactContext);
-        }
-
-        AudioProcessingFactory audioProcessingFactory = null;
         try {
             if (options.audioProcessingFactoryProvider != null) {
                 audioProcessingFactory = options.audioProcessingFactoryProvider.getFactory();
@@ -118,26 +111,76 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         Log.d(TAG, "Using video encoder factory: " + encoderFactory.getClass().getCanonicalName());
         Log.d(TAG, "Using video decoder factory: " + decoderFactory.getClass().getCanonicalName());
 
-        PeerConnectionFactory.Builder pcFactoryBuilder = PeerConnectionFactory.builder()
-                                                                 .setAudioDeviceModule(adm)
-                                                                 .setVideoEncoderFactory(encoderFactory)
-                                                                 .setVideoDecoderFactory(decoderFactory);
-
-        if (audioProcessingFactory != null) {
-            pcFactoryBuilder.setAudioProcessingFactory(audioProcessingFactory);
-        }
-
-        mFactory = pcFactoryBuilder.createPeerConnectionFactory();
-
-        // PeerConnectionFactory now owns the adm native pointer, and we don't need it anymore.
-        adm.release();
-
-        // Saving the encoder and decoder factories to get codec info later when needed.
         mVideoEncoderFactory = encoderFactory;
         mVideoDecoderFactory = decoderFactory;
-        mAudioDeviceModule = adm;
+        injectedAudioDeviceModule = options.audioDeviceModule;
 
+        factoryRegistry = new PeerConnectionFactoryRegistry((id, bypassVoiceProcessing) -> {
+            PeerConnectionFactoryProvider.BuildOptions buildOptions = new PeerConnectionFactoryProvider.BuildOptions();
+            buildOptions.context = getReactApplicationContext();
+            buildOptions.videoEncoderFactory = mVideoEncoderFactory;
+            buildOptions.videoDecoderFactory = mVideoDecoderFactory;
+            buildOptions.audioProcessingFactory = audioProcessingFactory;
+            buildOptions.injectedAudioDeviceModule = injectedAudioDeviceModule;
+            buildOptions.bypassVoiceProcessing = bypassVoiceProcessing;
+            buildOptions.speechActivityListener = createSpeechActivityListener();
+            return PeerConnectionFactoryProvider.build(id, buildOptions);
+        });
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
+    }
+
+    @ReactMethod
+    public void createCallFactory(ReadableMap options, Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            try {
+                boolean bypassVoiceProcessing = options != null && options.hasKey("bypassVoiceProcessing")
+                        && options.getBoolean("bypassVoiceProcessing");
+                factoryRegistry.create(bypassVoiceProcessing);
+                promise.resolve(null);
+            } catch (Exception e) {
+                Log.e(TAG, "createCallFactory() failed", e);
+                promise.reject("E_FACTORY_CREATE", e);
+            }
+        });
+    }
+
+    @ReactMethod
+    public void disposeCallFactory(Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            // Tear down in strict order: PeerConnections -> tracks -> factory.
+            // A libwebrtc PeerConnectionFactory must NOT be disposed while PeerConnections or
+            // tracks created from it are still alive — that is a use-after-free that can wedge the
+            // native worker threads, and since this runs on a single-threaded executor a wedge
+            // blocks every later call. Disposing the factory's own PCs and tracks here first (and
+            // idempotently) guarantees that ordering regardless of what else may still be in flight.
+
+            // 1. Dispose the factory's PeerConnections first.
+            for (int pcId : factoryRegistry.currentOwnedPcIds()) {
+                try {
+                    PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
+                    if (pco != null && pco.getPeerConnection() != null) {
+                        pco.dispose();
+                        mPeerConnectionObservers.remove(pcId);
+                    }
+                    factoryRegistry.unbindPeerConnection(pcId);
+                } catch (Exception e) {
+                    Log.w(TAG, "disposeCallFactory(): error disposing pc " + pcId, e);
+                }
+            }
+
+            // 2. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
+            // preview) so the camera2 session is fully closed before the VideoSources are freed.
+            for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
+                try {
+                    getUserMediaImpl.disposeTrack(trackId);
+                } catch (Exception e) {
+                    Log.w(TAG, "disposeCallFactory(): error disposing track " + trackId, e);
+                }
+            }
+
+            // 3. Now it is safe to dispose the factory + its ADM.
+            promise.resolve(factoryRegistry.disposeCurrent());
+        });
     }
 
     @Override
@@ -173,11 +216,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                         // 3. Stop capturers + dispose tracks (prevents use-after-free on factory threads)
                         getUserMediaImpl.disposeAllTracks();
 
-                        // 4. Dispose factory (frees C++ factory + 3 threads)
-                        if (mFactory != null) {
-                            mFactory.dispose();
-                            mFactory = null;
-                        }
+                        // 4. Dispose all factories (frees each C++ factory + its ADM + 3 threads)
+                        factoryRegistry.disposeAll();
 
                         return null;
                     })
@@ -189,8 +229,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         super.invalidate();
     }
 
-    private JavaAudioDeviceModule createAudioDeviceModule(ReactApplicationContext reactContext) {
-        speechActivityDetector = new SpeechActivityDetector(new SpeechActivityDetector.Listener() {
+    private SpeechActivityDetector.Listener createSpeechActivityListener() {
+        return new SpeechActivityDetector.Listener() {
             @Override
             public void onSpeechStarted() {
                 WritableMap params = Arguments.createMap();
@@ -204,95 +244,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 params.putString("event", "ended");
                 sendEvent("audioDeviceModuleSpeechActivity", params);
             }
-        });
-
-        return JavaAudioDeviceModule.builder(reactContext)
-                .setUseHardwareAcousticEchoCanceler(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                .setUseHardwareNoiseSuppressor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                .setUseStereoOutput(true)
-                .setAudioBufferCallback(
-                        (audioBuffer, audioFormat, channelCount, sampleRate, bytesRead, captureTimeNs) -> {
-                            // 1. Speech activity detection on raw mic data, BEFORE any mutation.
-                            speechActivityDetector.processBuffer(audioBuffer, bytesRead);
-
-                            // 2. Existing screen-audio mixing — mutates audioBuffer in place.
-                            if (bytesRead > 0) {
-                                WebRTCModuleOptions.ScreenAudioBytesProvider provider =
-                                        WebRTCModuleOptions.getInstance().screenAudioBytesProvider;
-                                if (provider != null) {
-                                    java.nio.ByteBuffer screenBuffer = provider.getScreenAudioBytes(bytesRead);
-                                    if (screenBuffer != null && screenBuffer.remaining() > 0) {
-                                        mixScreenAudioIntoBuffer(audioBuffer, screenBuffer, bytesRead);
-                                    }
-                                }
-                            }
-                            return captureTimeNs;
-                        })
-                .setAudioRecordStateCallback(new JavaAudioDeviceModule.AudioRecordStateCallback() {
-                    @Override
-                    public void onWebRtcAudioRecordStart() {
-                        speechActivityDetector.reset();
-                    }
-
-                    @Override
-                    public void onWebRtcAudioRecordStop() {
-                        speechActivityDetector.onRecordStop();
-                    }
-                })
-                .setPlaybackSamplesReadyCallback(samples -> {
-                    // Fan-out to every registered consumer. The list is
-                    // a CopyOnWriteArrayList so iteration is safe even
-                    // if a consumer registers/unregisters mid-call.
-                    for (JavaAudioDeviceModule.PlaybackSamplesReadyCallback obs :
-                            WebRTCModuleOptions.getInstance().getPlaybackSamplesObservers()) {
-                        try {
-                            obs.onWebRtcAudioTrackSamplesReady(samples);
-                        } catch (Throwable t) {
-                            // Audio device module thread must not throw.
-                            android.util.Log.w(TAG, "playback samples observer threw", t);
-                        }
-                    }
-                })
-                .createAudioDeviceModule();
-    }
-
-    /**
-     * Mixes screen audio into the microphone buffer using PCM 16-bit additive mixing
-     * with clamping. Handles different buffer sizes safely: each buffer is read only
-     * within its own bounds. When one buffer is shorter, the other's samples pass
-     * through unmodified (mic samples stay as-is, or screen-only samples are written).
-     */
-    private static void mixScreenAudioIntoBuffer(
-            java.nio.ByteBuffer micBuffer, java.nio.ByteBuffer screenBuffer, int bytesRead) {
-        micBuffer.position(0);
-        screenBuffer.position(0);
-
-        micBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
-        screenBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
-
-        java.nio.ShortBuffer micShorts = micBuffer.asShortBuffer();
-        java.nio.ShortBuffer screenShorts = screenBuffer.asShortBuffer();
-
-        int micSamples = Math.min(bytesRead / 2, micShorts.remaining());
-        int screenSamples = screenShorts.remaining();
-        int totalSamples = Math.max(micSamples, screenSamples);
-
-        for (int i = 0; i < totalSamples; i++) {
-            int sum;
-            if (i >= micSamples) {
-                // Screen-only: mic buffer is shorter — write screen sample directly
-                sum = screenShorts.get(i);
-            } else if (i >= screenSamples) {
-                // Mic-only: screen buffer is shorter — keep mic sample as-is
-                break;
-            } else {
-                // Both buffers have data — add samples
-                sum = micShorts.get(i) + screenShorts.get(i);
-            }
-            if (sum > Short.MAX_VALUE) sum = Short.MAX_VALUE;
-            if (sum < Short.MIN_VALUE) sum = Short.MIN_VALUE;
-            micShorts.put(i, (short) sum);
-        }
+        };
     }
 
     @NonNull
@@ -301,8 +253,16 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         return "WebRTCModule";
     }
 
+    @Nullable
     public AudioDeviceModule getAudioDeviceModule() {
-        return mAudioDeviceModule;
+        PeerConnectionFactoryProvider factory = factoryRegistry.getOrCreateDefault();
+        return factory == null ? null : factory.adm;
+    }
+
+    @Nullable
+    public AudioDeviceModule currentAudioDeviceModuleOrNil() {
+        PeerConnectionFactoryProvider factory = factoryRegistry.resolveCurrentOrNil();
+        return factory == null ? null : factory.adm;
     }
 
     public GetUserMediaImpl getUserMediaImpl() {
@@ -607,13 +567,15 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         try {
             return (boolean) ThreadUtils
                     .submitToExecutor(() -> {
+                        PeerConnectionFactoryProvider spcf = factoryRegistry.getOrCreateDefault();
                         PeerConnectionObserver observer = new PeerConnectionObserver(this, id);
-                        PeerConnection peerConnection = mFactory.createPeerConnection(rtcConfiguration, observer);
+                        PeerConnection peerConnection = spcf.factory.createPeerConnection(rtcConfiguration, observer);
                         if (peerConnection == null) {
                             return false;
                         }
                         observer.setPeerConnection(peerConnection);
                         mPeerConnectionObservers.put(id, observer);
+                        factoryRegistry.bindPeerConnection(id, spcf);
                         return true;
                     })
                     .get();
@@ -686,7 +648,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     public VideoTrack createVideoTrack(AbstractVideoCaptureController videoCaptureController) {
-        return getUserMediaImpl.createVideoTrack(videoCaptureController);
+        return getUserMediaImpl.createVideoTrack(videoCaptureController, factoryRegistry.getOrCreateDefault());
     }
 
     public void registerTrack(AudioTrack track, AudioSource source) {
@@ -700,7 +662,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     public void createStream(
             MediaStreamTrack[] tracks, GetUserMediaImpl.BiConsumer<String, ArrayList<WritableMap>> successCallback) {
-        getUserMediaImpl.createStream(tracks, successCallback);
+        getUserMediaImpl.createStream(tracks, factoryRegistry.getOrCreateDefault(), successCallback);
     }
 
     /**
@@ -994,13 +956,14 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                     return;
                 }
 
-                // Convert JSON codec capabilities to the actual objects.
+                // Codec capabilities come from the live call factory.
+                PeerConnectionFactory factory = factoryRegistry.getOrCreateDefault().factory;
                 RtpTransceiver.RtpTransceiverDirection direction = transceiver.getDirection();
                 List<Pair<Map<String, Object>, RtpCapabilities.CodecCapability>> availableCodecs = new ArrayList<>();
 
                 if (direction.equals(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)
                         || direction.equals(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)) {
-                    RtpCapabilities capabilities = mFactory.getRtpSenderCapabilities(transceiver.getMediaType());
+                    RtpCapabilities capabilities = factory.getRtpSenderCapabilities(transceiver.getMediaType());
                     for (RtpCapabilities.CodecCapability codec : capabilities.codecs) {
                         Map<String, Object> codecDict = SerializeUtils.serializeRtpCapabilitiesCodec(codec).toHashMap();
                         availableCodecs.add(new Pair<>(codecDict, codec));
@@ -1009,7 +972,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
                 if (direction.equals(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)
                         || direction.equals(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)) {
-                    RtpCapabilities capabilities = mFactory.getRtpReceiverCapabilities(transceiver.getMediaType());
+                    RtpCapabilities capabilities = factory.getRtpReceiverCapabilities(transceiver.getMediaType());
                     for (RtpCapabilities.CodecCapability codec : capabilities.codecs) {
                         Map<String, Object> codecDict = SerializeUtils.serializeRtpCapabilitiesCodec(codec).toHashMap();
                         availableCodecs.add(new Pair<>(codecDict, codec));
@@ -1045,7 +1008,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void getUserMedia(ReadableMap constraints, Callback successCallback, Callback errorCallback) {
-        ThreadUtils.runOnExecutor(() -> getUserMediaImpl.getUserMedia(constraints, successCallback, errorCallback));
+        ThreadUtils.runOnExecutor(() -> getUserMediaImpl.getUserMedia(
+                constraints, successCallback, errorCallback));
     }
 
     @ReactMethod
@@ -1056,7 +1020,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void mediaStreamCreate(String id) {
         ThreadUtils.runOnExecutor(() -> {
-            MediaStream mediaStream = mFactory.createLocalMediaStream(id);
+            PeerConnectionFactoryProvider spcf = factoryRegistry.getOrCreateDefault();
+            MediaStream mediaStream = spcf.factory.createLocalMediaStream(id);
             localStreams.put(id, mediaStream);
         });
     }
@@ -1493,7 +1458,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             return Arguments.createMap();
                         }
 
-                        RtpCapabilities capabilities = mFactory.getRtpReceiverCapabilities(mediaType);
+                        RtpCapabilities capabilities =
+                                factoryRegistry.getOrCreateDefault().factory.getRtpReceiverCapabilities(mediaType);
                         return SerializeUtils.serializeRtpCapabilities(capabilities);
                     })
                     .get();
@@ -1517,7 +1483,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             return Arguments.createMap();
                         }
 
-                        RtpCapabilities capabilities = mFactory.getRtpSenderCapabilities(mediaType);
+                        RtpCapabilities capabilities =
+                                factoryRegistry.getOrCreateDefault().factory.getRtpSenderCapabilities(mediaType);
                         return SerializeUtils.serializeRtpCapabilities(capabilities);
                     })
                     .get();
@@ -1625,11 +1592,16 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     public void peerConnectionDispose(int id) {
         ThreadUtils.runOnExecutor(() -> {
             PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
-            if (pco == null || pco.getPeerConnection() == null) {
-                Log.d(TAG, "peerConnectionDispose() peerConnection is null");
+            // Null-safe: the PC may already have been disposed (e.g. by
+            // disposeCallFactory, which tears down the factory's owned PCs first). Skip the
+            // dispose in that case instead of NPEing, but always clear the factory binding.
+            if (pco == null) {
+                Log.d(TAG, "peerConnectionDispose() peerConnection observer is null");
+            } else {
+                pco.dispose();
+                mPeerConnectionObservers.remove(id);
             }
-            pco.dispose();
-            mPeerConnectionObservers.remove(id);
+            factoryRegistry.unbindPeerConnection(id);
         });
     }
 
