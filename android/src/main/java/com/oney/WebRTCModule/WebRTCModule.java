@@ -115,7 +115,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         mVideoDecoderFactory = decoderFactory;
         injectedAudioDeviceModule = options.audioDeviceModule;
 
-        factoryRegistry = new PeerConnectionFactoryRegistry((id, bypassVoiceProcessing) -> {
+        factoryRegistry = new PeerConnectionFactoryRegistry((id, bypassVoiceProcessing, stereoInputEnabled) -> {
             PeerConnectionFactoryProvider.BuildOptions buildOptions = new PeerConnectionFactoryProvider.BuildOptions();
             buildOptions.context = getReactApplicationContext();
             buildOptions.videoEncoderFactory = mVideoEncoderFactory;
@@ -123,6 +123,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             buildOptions.audioProcessingFactory = audioProcessingFactory;
             buildOptions.injectedAudioDeviceModule = injectedAudioDeviceModule;
             buildOptions.bypassVoiceProcessing = bypassVoiceProcessing;
+            buildOptions.stereoInputEnabled = stereoInputEnabled;
             buildOptions.speechActivityListener = createSpeechActivityListener();
             return PeerConnectionFactoryProvider.build(id, buildOptions);
         });
@@ -135,7 +136,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             try {
                 boolean bypassVoiceProcessing = options != null && options.hasKey("bypassVoiceProcessing")
                         && options.getBoolean("bypassVoiceProcessing");
-                factoryRegistry.create(bypassVoiceProcessing);
+                boolean stereoInputEnabled = options != null && options.hasKey("stereoInputEnabled")
+                        && options.getBoolean("stereoInputEnabled");
+                factoryRegistry.create(bypassVoiceProcessing, stereoInputEnabled);
                 promise.resolve(null);
             } catch (Exception e) {
                 Log.e(TAG, "createCallFactory() failed", e);

@@ -23,7 +23,7 @@ class PeerConnectionFactoryRegistry {
     private static final String TAG = "PCFactoryRegistry";
 
     interface FactoryBuilder {
-        PeerConnectionFactoryProvider build(String id, boolean bypassVoiceProcessing);
+        PeerConnectionFactoryProvider build(String id, boolean bypassVoiceProcessing, boolean stereoInputEnabled);
     }
 
     private final FactoryBuilder builder;
@@ -60,7 +60,7 @@ class PeerConnectionFactoryRegistry {
         if (disposed) {
             return null; // torn down; do not rebuild
         }
-        return buildAndSetCurrent(false, true);
+        return buildAndSetCurrent(false, false, true);
     }
 
     @Nullable
@@ -82,7 +82,7 @@ class PeerConnectionFactoryRegistry {
         return null;
     }
 
-    synchronized PeerConnectionFactoryProvider create(boolean bypassVoiceProcessing) {
+    synchronized PeerConnectionFactoryProvider create(boolean bypassVoiceProcessing, boolean stereoInputEnabled) {
         if (disposed) {
             throw new IllegalStateException("PeerConnectionFactoryRegistry is disposed");
         }
@@ -105,16 +105,18 @@ class PeerConnectionFactoryRegistry {
                 return existing;
             }
         }
-        return buildAndSetCurrent(bypassVoiceProcessing, false);
+        return buildAndSetCurrent(bypassVoiceProcessing, stereoInputEnabled, false);
     }
 
-    private PeerConnectionFactoryProvider buildAndSetCurrent(boolean bypassVoiceProcessing, boolean isDefault) {
+    private PeerConnectionFactoryProvider buildAndSetCurrent(
+            boolean bypassVoiceProcessing, boolean stereoInputEnabled, boolean isDefault) {
         String id = UUID.randomUUID().toString();
-        PeerConnectionFactoryProvider factory = builder.build(id, bypassVoiceProcessing);
+        PeerConnectionFactoryProvider factory = builder.build(id, bypassVoiceProcessing, stereoInputEnabled);
         currentFactory = factory;
         currentIsBareForkDefault = isDefault;
         String kind = isDefault ? "DEFAULT (bare-fork)" : "per-call";
-        Log.d(TAG, "🏭 CREATED " + kind + " factory " + id + " (bypassVoiceProcessing=" + bypassVoiceProcessing + ")");
+        Log.d(TAG, "🏭 CREATED " + kind + " factory " + id + " (bypassVoiceProcessing=" + bypassVoiceProcessing
+                + ", stereoInputEnabled=" + stereoInputEnabled + ")");
         if (isDefault) {
             // Should not happen during normal Stream SDK operation: every consumer resolves through
             // the live call factory built at join. A default build means something reached the

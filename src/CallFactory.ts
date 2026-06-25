@@ -9,6 +9,11 @@ export interface CallFactoryOptions {
      * immutable for the life of the factory.
      */
     bypassVoiceProcessing?: boolean;
+    /**
+     * Builds the AudioDeviceModule for stereo microphone capture. Android only; ignored on iOS.
+     * Baked in at construction — immutable for the life of the factory.
+     */
+    stereoInputEnabled?: boolean;
 }
 
 /**
@@ -21,7 +26,8 @@ export default class CallFactory {
     /** Builds a fresh native factory with the given audio profile and makes it the live factory. */
     static async create(options: CallFactoryOptions = {}): Promise<CallFactory> {
         await WebRTCModule.createCallFactory({
-            bypassVoiceProcessing: options.bypassVoiceProcessing ?? false
+            bypassVoiceProcessing: options.bypassVoiceProcessing ?? false,
+            stereoInputEnabled: options.stereoInputEnabled ?? false
         });
 
         return new CallFactory();

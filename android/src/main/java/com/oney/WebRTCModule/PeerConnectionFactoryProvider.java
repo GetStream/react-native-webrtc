@@ -51,6 +51,8 @@ class PeerConnectionFactoryProvider {
         AudioDeviceModule injectedAudioDeviceModule;
         /** The music / high-quality audio profile: disables HW AEC/NS, uses the raw mic source. */
         boolean bypassVoiceProcessing;
+        /** Stereo microphone capture. Only takes effect under {@link #bypassVoiceProcessing}. */
+        boolean stereoInputEnabled;
         /** Receives speaking-while-muted events; the module backs this with the RN event emitter. */
         @Nullable
         SpeechActivityDetector.Listener speechActivityListener;
@@ -79,7 +81,8 @@ class PeerConnectionFactoryProvider {
 
     @NonNull
     static PeerConnectionFactoryProvider build(@NonNull String id, @NonNull BuildOptions options) {
-        Log.d(TAG, "build() id=" + id + " bypassVoiceProcessing=" + options.bypassVoiceProcessing);
+        Log.d(TAG, "build() id=" + id + " bypassVoiceProcessing=" + options.bypassVoiceProcessing
+                + " stereoInputEnabled=" + options.stereoInputEnabled);
 
         AudioDeviceModule adm = options.injectedAudioDeviceModule != null
                 ? options.injectedAudioDeviceModule
@@ -104,11 +107,12 @@ class PeerConnectionFactoryProvider {
         JavaAudioDeviceModule.Builder builder = JavaAudioDeviceModule.builder(options.context);
 
         if (options.bypassVoiceProcessing) {
-            // Music / high-quality profile: bypass the platform voice pipeline so the raw, stereo,
-            // native-rate signal reaches WebRTC unmodified.
+            // Music / high-quality profile: bypass the platform voice pipeline so the raw,
+            // native-rate signal reaches WebRTC unmodified. Stereo input is opt-in (it requires the
+            // bypassed pipeline, since the platform voice path is mono).
             builder.setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
-                    // .setUseStereoInput(true)
+                    .setUseStereoInput(options.stereoInputEnabled)
                     .setUseStereoOutput(true)
                     .setAudioSource(MediaRecorder.AudioSource.MIC)
                     .setOutputSampleRate(nativeOutputSampleRate(options.context));
