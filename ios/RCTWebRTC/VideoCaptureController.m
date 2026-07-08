@@ -52,9 +52,42 @@
         return;
     }
 
+    // Enable Center Stage when the device supports it; cooperative with Control Center.
+    if (@available(iOS 16.0, *)) {
+        BOOL centerStageSupported = NO;
+        for (AVCaptureDeviceFormat *fmt in [RTCCameraVideoCapturer supportedFormatsForDevice:self.device]) {
+            if (fmt.isCenterStageSupported) {
+                centerStageSupported = YES;
+                break;
+            }
+        }
+        if (centerStageSupported) {
+            AVCaptureDevice.centerStageControlMode = AVCaptureCenterStageControlModeCooperative;
+            AVCaptureDevice.centerStageEnabled = YES;
+        } else if (AVCaptureDevice.isCenterStageEnabled) {
+            AVCaptureDevice.centerStageEnabled = NO;
+        }
+    }
+
     AVCaptureDeviceFormat *format = [self selectFormatForDevice:self.device
                                                 withTargetWidth:self.width
                                                withTargetHeight:self.height];
+
+    // On multi cam devices selectFormatForDevice also requires format.multiCamSupported, and that set
+    // can be disjoint from the Center Stage one, leaving nothing to pick. Give up Center Stage rather
+    // than the capture: the control mode is cooperative above, so we are allowed to turn it off, and
+    // doing so lets AVFoundation accept a non-Center-Stage activeFormat.
+    if (@available(iOS 16.0, *)) {
+        if (!format && AVCaptureDevice.isCenterStageEnabled) {
+            RCTLogWarn(@"[VideoCaptureController] No Center Stage format for device %@, disabling Center Stage",
+                       self.device);
+            AVCaptureDevice.centerStageEnabled = NO;
+            format = [self selectFormatForDevice:self.device
+                                 withTargetWidth:self.width
+                                withTargetHeight:self.height];
+        }
+    }
+
     if (!format) {
         RCTLogWarn(@"[VideoCaptureController] No valid formats for device %@", self.device);
 
@@ -62,6 +95,17 @@
     }
 
     self.selectedFormat = format;
+
+    // Clamp fps to the range Center Stage allows for this format.
+    int fps = self.frameRate;
+    if (@available(iOS 16.0, *)) {
+        if (AVCaptureDevice.isCenterStageEnabled) {
+            AVFrameRateRange *csRange = format.videoFrameRateRangeForCenterStage;
+            if (csRange) {
+                fps = MAX((int)csRange.minFrameRate, MIN(fps, (int)csRange.maxFrameRate));
+            }
+        }
+    }
 
     AVCaptureSession *session = self.capturer.captureSession;
     if (@available(iOS 16.0, *)) {
@@ -84,7 +128,7 @@
     __weak VideoCaptureController *weakSelf = self;
     [self.capturer startCaptureWithDevice:self.device
                                    format:format
-                                      fps:self.frameRate
+                                      fps:fps
                         completionHandler:^(NSError *err) {
                             if (err) {
                                 RCTLogError(@"[VideoCaptureController] Error starting capture: %@", err);
@@ -296,6 +340,11 @@
     AVCaptureDeviceFormat *selectedFormat = nil;
     int currentDiff = INT_MAX;
 
+    BOOL centerStageEnabled = NO;
+    if (@available(iOS 16.0, *)) {
+        centerStageEnabled = AVCaptureDevice.isCenterStageEnabled;
+    }
+
     for (AVCaptureDeviceFormat *format in formats) {
         // Only use multi cam formats when on multi cam supported devices.
         if (@available(iOS 13.0, macOS 14.0, tvOS 17.0, *)) {
@@ -303,6 +352,14 @@
                 continue;
             }
         }
+
+        // Center Stage only permits supported formats.
+        if (@available(iOS 16.0, *)) {
+            if (centerStageEnabled && !format.isCenterStageSupported) {
+                continue;
+            }
+        }
+
 
         CMVideoDimensions dimension = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
         FourCharCode pixelFormat = CMFormatDescriptionGetMediaSubType(format.formatDescription);
