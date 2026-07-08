@@ -9,6 +9,11 @@ on:
     paths-ignore:
       - '**.md'
 
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
 jobs:
   ios-compile:
     runs-on: macos-latest
