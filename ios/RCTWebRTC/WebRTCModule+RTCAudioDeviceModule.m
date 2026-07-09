@@ -203,11 +203,6 @@ RCT_EXPORT_METHOD(audioDeviceModuleSetRecordingAlwaysPreparedMode
                    reject:reject];
 }
 
-// TODO: `getEngineAvailability` / `setEngineAvailability` were dropped because the
-// Stream WebRTC SDK does not expose `RTCAudioEngineAvailability` / `-setEngineAvailability:`.
-// The closest equivalent is `RTCAudioEngineState` via `engineState`, but the
-// semantics differ and the JS API isn't consumed anywhere yet.
-
 // TODO: Observer delegate "resolve" methods were skipped because our current
 // `AudioDeviceModuleObserver` does not expose async JS-driven resolution hooks;
 // the Swift `AudioDeviceModule` wrapper always returns success immediately.

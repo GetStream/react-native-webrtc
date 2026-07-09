@@ -10,6 +10,9 @@ android/build
 Podfile.lock
 WebRTC.xcframework
 WebRTC.dSYMs
+# but DO commit the interim locally-built release framework vendored in-repo
+!/third_party/WebRTC.xcframework
+!/third_party/WebRTC.xcframework/**
 examples/GumTestApp/package-lock.json
 examples/GumTestApp_macOS/package-lock.json
 **/.xcode.env.local

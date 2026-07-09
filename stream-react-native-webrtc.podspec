@@ -20,8 +20,11 @@ Pod::Spec.new do |s|
   s.framework           = 'AudioToolbox','AVFoundation', 'CoreAudio', 'CoreGraphics', 'CoreVideo', 'GLKit', 'VideoToolbox'
   s.swift_version       = '5.0'
   s.dependency          'React-Core'
-  # WebRTC version from https://github.com/GetStream/stream-video-swift-webrtc releases
-  s.dependency          'StreamWebRTC', '= 145.10.0'
+  # WebRTC version from https://github.com/GetStream/stream-video-swift-webrtc releases.
+  # 148.0.0 is not yet published to CocoaPods trunk. Until it is, consuming apps must
+  # add the interim podspec to their Podfile:
+  #   pod 'StreamWebRTC', :podspec => '../node_modules/stream-react-native-webrtc/third_party/StreamWebRTC.podspec'
+  s.dependency          'StreamWebRTC', '= 148.0.0'
   # Swift/Objective-C compatibility #https://blog.cocoapods.org/CocoaPods-1.5.0/
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES'

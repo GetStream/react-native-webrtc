@@ -1,6 +1,6 @@
 {
   "name": "@stream-io/react-native-webrtc",
-  "version": "145.0.0",
+  "version": "148.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GetStream/react-native-webrtc.git"
@@ -35,7 +35,7 @@
     "cpp",
     "stream-react-native-webrtc.podspec",
     "package.json",
-    "WebRTC.xcframework.zip",
+    "third_party",
     "app.plugin.js",
     "!macos/build",
     "!ios/build",
