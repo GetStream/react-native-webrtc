@@ -345,6 +345,17 @@ import WebRTC
         source.refreshStereoPlayoutState()
     }
 
+    /// Gates whether the audio engine may start/stop for input and output.
+    /// Used to defer engine start until CallKit activates the AVAudioSession.
+    public func setEngineAvailability(_ availability: RTCAudioEngineAvailability) -> Int {
+        source.setEngineAvailability(availability)
+    }
+
+    /// The current engine availability for input and output.
+    public var engineAvailability: RTCAudioEngineAvailability {
+        source.engineAvailability
+    }
+
     // MARK: - RTCAudioDeviceModuleDelegate
 
     /// Receives speech activity notifications emitted by WebRTC VAD.

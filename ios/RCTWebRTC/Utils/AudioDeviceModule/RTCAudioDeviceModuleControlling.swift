@@ -31,6 +31,16 @@ protocol RTCAudioDeviceModuleControlling: AnyObject {
     func refreshStereoPlayoutState()
     func setMuteMode(_ mode: RTCAudioEngineMuteMode) -> Int
     func setRecordingAlwaysPreparedMode(_ alwaysPreparedRecording: Bool) -> Int
+    func setEngineAvailability(_ availability: RTCAudioEngineAvailability) -> Int
+    var engineAvailability: RTCAudioEngineAvailability { get }
+}
+
+extension RTCAudioEngineAvailability {
+    /// Engine may activate for both input and output (the WebRTC default).
+    static let `default` = RTCAudioEngineAvailability(isInputAvailable: true, isOutputAvailable: true)
+    /// Engine start/stop is gated off for both input and output (e.g. before CallKit
+    /// activates the AVAudioSession).
+    static let none = RTCAudioEngineAvailability(isInputAvailable: false, isOutputAvailable: false)
 }
 
 extension RTCAudioDeviceModule: RTCAudioDeviceModuleControlling {
