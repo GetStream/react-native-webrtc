@@ -17,9 +17,9 @@ end
 target 'GumTestApp' do
   config = use_native_modules!
 
-  # StreamWebRTC 148.0.0 is not yet on CocoaPods trunk; use the interim podspec
-  # that points at the pre-release xcframework on GitHub releases.
-  pod 'StreamWebRTC', :podspec => '../../../third_party/StreamWebRTC.podspec'
+  # StreamWebRTC 148.0.0 is not yet on CocoaPods trunk; vendor the interim
+  # locally-built RELEASE framework committed under third_party/.
+  pod 'StreamWebRTC', :path => '../../../third_party'
 
   use_react_native!(
     :path => config[:reactNativePath],
