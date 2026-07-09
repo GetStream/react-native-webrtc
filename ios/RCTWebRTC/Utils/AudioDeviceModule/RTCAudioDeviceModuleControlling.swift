@@ -37,10 +37,10 @@ protocol RTCAudioDeviceModuleControlling: AnyObject {
 
 extension RTCAudioEngineAvailability {
     /// Engine may activate for both input and output (the WebRTC default).
-    static let `default` = RTCAudioEngineAvailability(isInputAvailable: true, isOutputAvailable: true)
+    public static let `default` = RTCAudioEngineAvailability(isInputAvailable: true, isOutputAvailable: true)
     /// Engine start/stop is gated off for both input and output (e.g. before CallKit
     /// activates the AVAudioSession).
-    static let none = RTCAudioEngineAvailability(isInputAvailable: false, isOutputAvailable: false)
+    public static let none = RTCAudioEngineAvailability(isInputAvailable: false, isOutputAvailable: false)
 }
 
 extension RTCAudioDeviceModule: RTCAudioDeviceModuleControlling {
