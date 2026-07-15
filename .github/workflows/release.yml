@@ -1,0 +1,33 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run release in "dry run" mode (does not publish)
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write # Required for npm Trusted Publishing (OIDC) + provenance
+  contents: write # Required to push the changelog/version commit + create the GH Release
+
+jobs:
+  package_release:
+    name: Release from "${{ github.ref_name }}" branch
+    runs-on: ubuntu-latest
+    # GH does not allow limiting branches in workflow_dispatch settings, so guard here.
+    if: ${{ inputs.dry_run || github.ref_name == 'master' || github.ref_name == 'beta' || startsWith(github.ref_name, 'release') || endsWith(github.ref_name, '.x') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full history + tags required by semantic-release
+
+      - uses: ./.github/actions/setup-node
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          npx semantic-release
+          ${{ inputs.dry_run && '--dry-run' || '' }}

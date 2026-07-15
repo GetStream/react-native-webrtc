@@ -16,19 +16,13 @@ jobs:
   android-compile:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-java@v4
+    - uses: actions/checkout@v6
+    - uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
         java-version: '17'
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22.x'
-        cache: 'npm'
-        cache-dependency-path: '**/package-lock.json'
 
-    - name: Install node modules
-      run: npm install
+    - uses: ./.github/actions/setup-node
 
     - name: Install example node modules
       run: npm install
