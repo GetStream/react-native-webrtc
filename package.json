@@ -20,8 +20,8 @@
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
   "dependencies": {
-    "base64-js": "1.5.1",
-    "debug": "4.3.4"
+    "base64-js": "^1.5.1",
+    "debug": "^4.4.3"
   },
   "peerDependencies": {
     "react-native": ">=0.73.0"
@@ -50,6 +50,7 @@
     "!**/.*"
   ],
   "scripts": {
+    "build": "bob build",
     "lint": "eslint --max-warnings 0 . && tsc --noEmit",
     "lintfix": "eslint --max-warnings 0 --fix . && tsc --noEmit",
     "prepare": "husky install && bob build",
@@ -69,7 +70,7 @@
     "lint-staged": "11.2.3",
     "prettier": "2.4.1",
     "react-native": "0.80.1",
-    "react-native-builder-bob": "0.18.2",
+    "react-native-builder-bob": "^0.43.0",
     "typescript": "^5.8.3"
   },
   "lint-staged": {
