@@ -10,6 +10,9 @@ if (WebRTCModule === null) {
 
 import { AudioDeviceModule, AudioEngineMuteMode } from './AudioDeviceModule';
 import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
+import CallFactory, {
+    type CallFactoryOptions,
+} from './CallFactory';
 import { setupNativeEvents } from './EventEmitter';
 import Logger from './Logger';
 import mediaDevices from './MediaDevices';
@@ -18,6 +21,7 @@ import MediaStreamTrack, { type MediaTrackSettings } from './MediaStreamTrack';
 import MediaStreamTrackEvent from './MediaStreamTrackEvent';
 import permissions from './Permissions';
 import RTCAudioSession from './RTCAudioSession';
+import RTCCameraPreviewView from './RTCCameraPreviewView';
 import RTCCertificate from './RTCCertificate';
 import RTCErrorEvent from './RTCErrorEvent';
 import RTCIceCandidate from './RTCIceCandidate';
@@ -45,7 +49,10 @@ export {
     RTCSessionDescription,
     RTCCertificate,
     RTCView,
+    RTCCameraPreviewView,
     ScreenCapturePickerView,
+    CallFactory,
+    type CallFactoryOptions,
     RTCRtpEncodingParameters,
     RTCRtpTransceiver,
     RTCRtpReceiver,

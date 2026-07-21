@@ -8,6 +8,7 @@
 #import <React/RCTUtils.h>
 
 #import "AudioDeviceModuleObserver.h"
+#import "RTCCameraPreviewViewManager.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
@@ -46,8 +47,7 @@
         [peerConnection close];
     }
     [_peerConnections removeAllObjects];
-
-    _peerConnectionFactory = nil;
+    [_factoryRegistry disposeAll];
 }
 
 - (instancetype)init {
@@ -99,39 +99,22 @@
             options.audioProcessingModule = audioProcessingModule;
             RCTLogInfo(@"Created default audio processing module for screen share audio mixing");
         }
-
-        if (audioProcessingModule != nil) {
-            if (audioDevice != nil) {
-                NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring "
-                      @"audioDevice.");
-            }
-            RCTLogInfo(@"Using audio processing module: %@", NSStringFromClass([audioProcessingModule class]));
-
-            _peerConnectionFactory =
-                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
-                                                          bypassVoiceProcessing:NO
-                                                                 encoderFactory:encoderFactory
-                                                                 decoderFactory:decoderFactory
-                                                          audioProcessingModule:audioProcessingModule];
-        } else if (audioDevice != nil) {
-            RCTLogInfo(@"Using custom audio device: %@", NSStringFromClass([audioDevice class]));
-            _peerConnectionFactory = [[RTCPeerConnectionFactory alloc] initWithEncoderFactory:encoderFactory
-                                                                               decoderFactory:decoderFactory
-                                                                                  audioDevice:audioDevice];
-        } else {
-            _peerConnectionFactory =
-                [[RTCPeerConnectionFactory alloc] initWithAudioDeviceModuleType:RTCAudioDeviceModuleTypeAudioEngine
-                                                          bypassVoiceProcessing:NO
-                                                                 encoderFactory:encoderFactory
-                                                                 decoderFactory:decoderFactory
-                                                          audioProcessingModule:nil];
-        }
         
-        _peerConnectionFactory.frameBufferPolicy = RTCFrameBufferPolicyCopyToNV12;
-
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
-        _audioDeviceModule = [[AudioDeviceModule alloc] initWithSource:_peerConnectionFactory.audioDeviceModule
-                                                      delegateObserver:_rtcAudioDeviceModuleObserver];
+
+        // Capture the observer (not self) so the builder block doesn't retain the module.
+        AudioDeviceModuleObserver *audioDeviceModuleObserver = _rtcAudioDeviceModuleObserver;
+
+        self.factoryRegistry = [[PeerConnectionFactoryRegistry alloc]
+            initWithBuilder:^PeerConnectionFactoryProvider *(NSString *factoryId, BOOL bypassVoiceProcessing) {
+                return [PeerConnectionFactoryProvider buildWithId:factoryId
+                                            bypassVoiceProcessing:bypassVoiceProcessing
+                                                   encoderFactory:encoderFactory
+                                                   decoderFactory:decoderFactory
+                                            audioProcessingModule:options.audioProcessingModule
+                                                      audioDevice:options.audioDevice
+                                        audioDeviceModuleObserver:audioDeviceModuleObserver];
+            }];
 
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
@@ -143,6 +126,26 @@
     }
 
     return self;
+}
+
+- (RTCPeerConnectionFactory *)peerConnectionFactory {
+    return [self.factoryRegistry getOrCreateDefault].factory;
+}
+
+- (AudioDeviceModule *)audioDeviceModule {
+    return [self.factoryRegistry getOrCreateDefault].audioDeviceModule;
+}
+
+- (nullable AudioDeviceModule *)currentAudioDeviceModuleOrNil {
+    return [self.factoryRegistry resolveCurrentOrNil].audioDeviceModule;
+}
+
+- (CaptureController *)adoptActiveCameraPreviewForSource:(RTCVideoSource *)source {
+    id<RTCCameraPreviewControl> preview = self.activeCameraPreview;
+    if (preview) {
+        return [preview adoptCaptureForSource:source];
+    }
+    return nil;
 }
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag {
@@ -189,6 +192,25 @@ RCT_EXPORT_MODULE();
 
 - (dispatch_queue_t)methodQueue {
     return _workerQueue;
+}
+
+RCT_EXPORT_METHOD(createCallFactory
+                  : (NSDictionary *)options resolver
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
+    BOOL bypassVoiceProcessing = [options[@"bypassVoiceProcessing"] boolValue];
+    PeerConnectionFactoryProvider *factory = [self.factoryRegistry create:bypassVoiceProcessing];
+    if (factory == nil) {
+        reject(@"E_FACTORY_CREATE", @"Failed to create call factory: registry is disposed", nil);
+        return;
+    }
+    resolve(nil);
+}
+
+RCT_EXPORT_METHOD(disposeCallFactory
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
+    resolve(@([self.factoryRegistry disposeCurrent]));
 }
 
 - (NSArray<NSString *> *)supportedEvents {
