@@ -17,6 +17,7 @@
 #import "RTCCameraPreviewViewManager.h"
 #import "VideoCaptureController.h"
 #import "WebRTCModule.h"
+#import "WebRTCModuleOptions.h"
 
 typedef NS_ENUM(NSInteger, RTCCameraPreviewObjectFit) {
     /**
@@ -205,6 +206,8 @@ typedef NS_ENUM(NSInteger, RTCCameraPreviewObjectFit) {
                 RTCCameraVideoCapturer *capturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:self];
                 self->_captureController = [[VideoCaptureController alloc] initWithCapturer:capturer
                                                                             andConstraints:constraints];
+                self->_captureController.enableMultitaskingCameraAccess =
+                    [WebRTCModuleOptions sharedInstance].enableMultitaskingCameraAccess;
             } else {
                 [self->_captureController applyConstraints:constraints error:nil];
             }
