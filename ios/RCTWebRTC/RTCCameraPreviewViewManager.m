@@ -198,7 +198,7 @@ typedef NS_ENUM(NSInteger, RTCCameraPreviewObjectFit) {
         _capturing = YES;
         self.module.activeCameraPreview = self;
         dispatch_async(_captureQueue, ^{
-            if (self->_handedOff) {
+            if (self->_handedOff || !self->_capturing) {
                 return;
             }
             if (!self->_captureController) {
@@ -212,19 +212,15 @@ typedef NS_ENUM(NSInteger, RTCCameraPreviewObjectFit) {
         });
     } else if (!self.isActive && _capturing) {
         _capturing = NO;
-        
+
         [self clearActivePreview];
-        
-        VideoCaptureController *controller = _captureController;
+
         dispatch_async(_captureQueue, ^{
-            [controller stopCapture];
+            [self->_captureController stopCapture];
         });
     } else if (self.isActive && _capturing) {
-        // Possible config change (e.g. facing flip) while running; applyConstraints is a no-op if
-        // nothing changed and restarts the session otherwise.
-        VideoCaptureController *controller = _captureController;
         dispatch_async(_captureQueue, ^{
-            [controller applyConstraints:constraints error:nil];
+            [self->_captureController applyConstraints:constraints error:nil];
         });
     }
 }
