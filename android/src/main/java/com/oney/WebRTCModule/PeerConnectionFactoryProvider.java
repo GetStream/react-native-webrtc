@@ -46,9 +46,6 @@ class PeerConnectionFactoryProvider {
         VideoDecoderFactory videoDecoderFactory;
         @Nullable
         AudioProcessingFactory audioProcessingFactory;
-        /** A pre-built ADM injected via {@link WebRTCModuleOptions#audioDeviceModule}. */
-        @Nullable
-        AudioDeviceModule injectedAudioDeviceModule;
         /** The music / high-quality audio profile: disables HW AEC/NS, uses the raw mic source. */
         boolean bypassVoiceProcessing;
         /** Stereo microphone capture. Only takes effect under {@link #bypassVoiceProcessing}. */
@@ -84,10 +81,7 @@ class PeerConnectionFactoryProvider {
         Log.d(TAG, "build() id=" + id + " bypassVoiceProcessing=" + options.bypassVoiceProcessing
                 + " stereoInputEnabled=" + options.stereoInputEnabled);
 
-        AudioDeviceModule adm = options.injectedAudioDeviceModule != null
-                ? options.injectedAudioDeviceModule
-                : buildAudioDeviceModule(options);
-
+        AudioDeviceModule adm = buildAudioDeviceModule(options);
         PeerConnectionFactory.Builder pcFactoryBuilder = PeerConnectionFactory.builder()
                                                                  .setAudioDeviceModule(adm)
                                                                  .setVideoEncoderFactory(options.videoEncoderFactory)

@@ -49,8 +49,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     // Build inputs captured at module init and reused for every factory built later.
     @Nullable
     private AudioProcessingFactory audioProcessingFactory;
-    @Nullable
-    private AudioDeviceModule injectedAudioDeviceModule;
 
     // Need to expose the peer connection codec factories here to get capabilities
     private final SparseArray<PeerConnectionObserver> mPeerConnectionObservers;
@@ -113,7 +111,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
         mVideoEncoderFactory = encoderFactory;
         mVideoDecoderFactory = decoderFactory;
-        injectedAudioDeviceModule = options.audioDeviceModule;
 
         factoryRegistry = new PeerConnectionFactoryRegistry((id, bypassVoiceProcessing, stereoInputEnabled) -> {
             PeerConnectionFactoryProvider.BuildOptions buildOptions = new PeerConnectionFactoryProvider.BuildOptions();
@@ -121,7 +118,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             buildOptions.videoEncoderFactory = mVideoEncoderFactory;
             buildOptions.videoDecoderFactory = mVideoDecoderFactory;
             buildOptions.audioProcessingFactory = audioProcessingFactory;
-            buildOptions.injectedAudioDeviceModule = injectedAudioDeviceModule;
             buildOptions.bypassVoiceProcessing = bypassVoiceProcessing;
             buildOptions.stereoInputEnabled = stereoInputEnabled;
             buildOptions.speechActivityListener = createSpeechActivityListener();

@@ -99,12 +99,7 @@
             options.audioProcessingModule = audioProcessingModule;
             RCTLogInfo(@"Created default audio processing module for screen share audio mixing");
         }
-
-        if (audioProcessingModule != nil && audioDevice != nil) {
-            NSLog(@"Both audioProcessingModule and audioDevice are provided, but only one can be used. Ignoring "
-                  @"audioDevice.");
-        }
-
+        
         _rtcAudioDeviceModuleObserver = [[AudioDeviceModuleObserver alloc] initWithWebRTCModule:self];
 
         // Capture the observer (not self) so the builder block doesn't retain the module.
