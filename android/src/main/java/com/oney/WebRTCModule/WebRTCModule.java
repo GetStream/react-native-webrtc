@@ -134,6 +134,13 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                         && options.getBoolean("bypassVoiceProcessing");
                 boolean stereoInputEnabled = options != null && options.hasKey("stereoInputEnabled")
                         && options.getBoolean("stereoInputEnabled");
+                
+                // This makes default factory being disposed in a proper sequence.
+                if (factoryRegistry.isBareForkDefaultLive()) {
+                    Log.d(TAG, "createCallFactory(): tearing down stale bare-fork default (ordered) "
+                            + "before creating the call factory");
+                    disposeCurrentFactoryOrdered();
+                }
                 factoryRegistry.create(bypassVoiceProcessing, stereoInputEnabled);
                 promise.resolve(null);
             } catch (Exception e) {
@@ -145,41 +152,43 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void disposeCallFactory(Promise promise) {
-        ThreadUtils.runOnExecutor(() -> {
-            // Tear down in strict order: PeerConnections -> tracks -> factory.
-            // A libwebrtc PeerConnectionFactory must NOT be disposed while PeerConnections or
-            // tracks created from it are still alive — that is a use-after-free that can wedge the
-            // native worker threads, and since this runs on a single-threaded executor a wedge
-            // blocks every later call. Disposing the factory's own PCs and tracks here first (and
-            // idempotently) guarantees that ordering regardless of what else may still be in flight.
+        ThreadUtils.runOnExecutor(() -> promise.resolve(disposeCurrentFactoryOrdered()));
+    }
 
-            // 1. Dispose the factory's PeerConnections first.
-            for (int pcId : factoryRegistry.currentOwnedPcIds()) {
-                try {
-                    PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
-                    if (pco != null && pco.getPeerConnection() != null) {
-                        pco.dispose();
-                        mPeerConnectionObservers.remove(pcId);
-                    }
-                    factoryRegistry.unbindPeerConnection(pcId);
-                } catch (Exception e) {
-                    Log.w(TAG, "disposeCallFactory(): error disposing pc " + pcId, e);
+    /**
+     * Disposes the live factory in order — PeerConnections, then tracks, then the factory + its ADM —
+     * and returns whether a factory was disposed. A libwebrtc {@code PeerConnectionFactory} must not
+     * be disposed while PCs or tracks from it are still alive (use-after-free), so its dependents go
+     * first. Shared by {@link #disposeCallFactory} (leave) and {@link #createCallFactory} (replacing a
+     * stale bare-fork default at join).
+     */
+    private boolean disposeCurrentFactoryOrdered() {
+        // 1. Dispose the factory's PeerConnections first.
+        for (int pcId : factoryRegistry.currentOwnedPcIds()) {
+            try {
+                PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
+                if (pco != null && pco.getPeerConnection() != null) {
+                    pco.dispose();
+                    mPeerConnectionObservers.remove(pcId);
                 }
+                factoryRegistry.unbindPeerConnection(pcId);
+            } catch (Exception e) {
+                Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing pc " + pcId, e);
             }
+        }
 
-            // 2. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
-            // preview) so the camera2 session is fully closed before the VideoSources are freed.
-            for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
-                try {
-                    getUserMediaImpl.disposeTrack(trackId);
-                } catch (Exception e) {
-                    Log.w(TAG, "disposeCallFactory(): error disposing track " + trackId, e);
-                }
+        // 2. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
+        // preview) so the camera2 session is fully closed before the VideoSources are freed.
+        for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
+            try {
+                getUserMediaImpl.disposeTrack(trackId);
+            } catch (Exception e) {
+                Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing track " + trackId, e);
             }
+        }
 
-            // 3. Now it is safe to dispose the factory + its ADM.
-            promise.resolve(factoryRegistry.disposeCurrent());
-        });
+        // 3. Now it is safe to dispose the factory + its ADM.
+        return factoryRegistry.disposeCurrent();
     }
 
     @Override

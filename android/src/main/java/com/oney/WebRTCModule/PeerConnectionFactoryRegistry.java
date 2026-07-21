@@ -82,18 +82,24 @@ class PeerConnectionFactoryRegistry {
         return null;
     }
 
+    synchronized boolean isBareForkDefaultLive() {
+        return currentFactory != null && !currentFactory.isDisposed() && currentIsBareForkDefault;
+    }
+
     synchronized PeerConnectionFactoryProvider create(boolean bypassVoiceProcessing, boolean stereoInputEnabled) {
         if (disposed) {
             throw new IllegalStateException("PeerConnectionFactoryRegistry is disposed");
         }
-        // One factory at a time. A bare-fork default built pre-join is replaced cleanly. A live call
-        // factory means a second concurrent join, which the single-ADM constraint cannot support:
-        // keep it so the in-progress call's peer connections stay valid, and return it unchanged
-        // rather than tearing the live call down.
+
         if (currentFactory != null && !currentFactory.isDisposed()) {
             PeerConnectionFactoryProvider existing = currentFactory;
             if (currentIsBareForkDefault) {
-                Log.d(TAG, "disposed stale default before creating call factory");
+                if (!existing.ownedPcIds.isEmpty() || !existing.ownedTrackIds.isEmpty()) {
+                    throw new IllegalStateException("Refusing to replace bare-fork default " + existing.id
+                            + " that still owns " + existing.ownedPcIds.size() + " PC(s) / "
+                            + existing.ownedTrackIds.size() + " track(s); tear down its dependents first");
+                }
+                Log.d(TAG, "disposed empty stale default before creating call factory");
                 try {
                     existing.dispose();
                 } catch (Exception e) {
