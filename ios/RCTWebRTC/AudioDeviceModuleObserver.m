@@ -20,6 +20,11 @@ NS_ASSUME_NONNULL_BEGIN
 // outcome is deliberately preferred over the unrecoverable deadlock.
 static const int64_t kJSResponseTimeoutSeconds = 2;
 
+// Returned from willEnable/didDisable when native automatic audio-session
+// configuration fails, so libwebrtc rolls the engine operation back. Mirrors the
+// SDK's kAudioEngineErrorFailedToConfigureAudioSession value.
+static const NSInteger kAutomaticAudioSessionConfigError = -4100;
+
 static os_log_t ADMObserverLog(void) {
     static os_log_t log;
     static dispatch_once_t onceToken;
@@ -54,6 +59,13 @@ static os_log_t ADMObserverLog(void) {
 // runs on the native audio thread and the resolve side on the JS thread.
 @property(nonatomic, assign) NSInteger requestIdSeq;
 @property(nonatomic, assign) NSInteger awaitingRequestId;
+
+// Whether the native auto-config path currently holds an
+// RTCAudioSession activation it must later release. RTCAudioSession refcounts
+// setActive, so a mismatched activate/release leaves the OS session stuck active.
+// Touched only on the serial worker thread; atomic as insurance against future
+// cross-thread reads.
+@property(atomic, assign) BOOL autoSessionHoldsActivation;
 
 @end
 
@@ -110,7 +122,7 @@ static os_log_t ADMObserverLog(void) {
     if (!isActive) {
         // No handler registered, proceed immediately without JS round trip.
         // This avoids the deadlock window entirely.
-        os_log_debug(ADMObserverLog(), "Skipping JS round-trip for %{public}@ (no handler registered)", eventName);
+        os_log(ADMObserverLog(), "Skipping JS round-trip for %{public}@ (no handler registered)", eventName);
         return 0;
     }
 
@@ -185,6 +197,14 @@ static os_log_t ADMObserverLog(void) {
               willEnableEngine:(AVAudioEngine *)engine
               isPlayoutEnabled:(BOOL)isPlayoutEnabled
             isRecordingEnabled:(BOOL)isRecordingEnabled {
+    // With no custom JS handler registered, configure the audio session natively
+    // here instead of doing a JS round trip. This is the default path and avoids
+    // parking the audio worker thread on the JS thread entirely. A custom handler
+    // (isWillEnableEngineActive == YES) falls through to the bounded round trip.
+    if (!self.isWillEnableEngineActive && self.automaticAudioSessionConfig != nil) {
+        return [self applyAutomaticAudioSessionConfigForPlayout:isPlayoutEnabled recording:isRecordingEnabled];
+    }
+
     BOOL isActive = self.isWillEnableEngineActive;
 
     if (isActive) {
@@ -276,6 +296,29 @@ static os_log_t ADMObserverLog(void) {
               didDisableEngine:(AVAudioEngine *)engine
               isPlayoutEnabled:(BOOL)isPlayoutEnabled
             isRecordingEnabled:(BOOL)isRecordingEnabled {
+    // Counterpart of willEnable - apply the native session policy (here the
+    // deactivate-on-stop edge) without a JS round trip when no custom handler
+    // is registered. Also entered with a nil policy while an activation hold is
+    // still outstanding, so a hold orphaned by clearing the policy is released
+    // at the next full stop instead of leaking.
+    if (!self.isDidDisableEngineActive &&
+        (self.automaticAudioSessionConfig != nil || self.autoSessionHoldsActivation)) {
+        NSInteger result = [self applyAutomaticAudioSessionConfigForPlayout:isPlayoutEnabled
+                                                                  recording:isRecordingEnabled];
+        if (result != 0) {
+            // didDisable fires after the engine's disable work has already run, so
+            // libwebrtc cannot roll this operation back. Propagating an error here
+            // (e.g. a failed reconfigure on a duplex to playout transition) would
+            // only desync its logical engine state from hardware that has already
+            // changed. Log and report the operation as completed. Only willEnable
+            // propagates configuration and activation errors, where the enable has
+            // not happened yet and a rollback is still meaningful.
+            os_log_error(
+                ADMObserverLog(), "Native auto-config: error %ld in didDisable treated as completed", (long)result);
+        }
+        return 0;
+    }
+
     BOOL isActive = self.isDidDisableEngineActive;
 
     if (isActive) {
@@ -417,6 +460,196 @@ static os_log_t ADMObserverLog(void) {
                          self.willReleaseEngineResult = result;
                      }
                  semaphore:self.willReleaseEngineSemaphore];
+}
+
+#pragma mark - Native automatic audio session configuration
+
+// Applies the pushed audio-session policy on the worker thread:
+// - configures on every active state,
+// - activates when the session is not
+// - optionally deactivates on stop,
+// - returns a non-zero error code on failure so libwebrtc rolls the operation back.
+//
+// Activation is decided against RTCAudioSession's own state rather than a mirror
+// of past engine states, so a policy re-push mid-call (setupIOSAudioManagement
+// called again), a path switch, or an interruption cannot desync it:
+// - session already active (previous hold, custom JS path, or the app) ->
+//   reconfigure only, never a second refcounted activation.
+// - session inactive (fresh start, or the custom path deactivated it before a
+//   switch back to the native path) -> activate and take the hold.
+- (NSInteger)applyAutomaticAudioSessionConfigForPlayout:(BOOL)isPlayoutEnabled recording:(BOOL)isRecordingEnabled {
+    NSDictionary *policy = self.automaticAudioSessionConfig;
+    BOOL nowActive = isPlayoutEnabled || isRecordingEnabled;
+
+    if (policy == nil) {
+        // The policy was cleared while we still hold an activation (a setup was
+        // torn down mid-call, or a deactivateOnStop:NO policy was abandoned).
+        // Release the orphaned hold at the next full stop so the shared
+        // activation count stays balanced. No configuration is applied because
+        // the native path is disarmed.
+        if (!nowActive && self.autoSessionHoldsActivation) {
+            os_log(ADMObserverLog(), "Native auto-config: releasing orphaned activation hold");
+            RTCAudioSession *session = [RTCAudioSession sharedInstance];
+            [session lockForConfiguration];
+            NSError *releaseError = nil;
+            [session setActive:NO error:&releaseError];
+            self.autoSessionHoldsActivation = NO;
+            [session unlockForConfiguration];
+            if (releaseError != nil) {
+                os_log_error(ADMObserverLog(),
+                             "Native auto-config: orphaned hold release failed (continuing): %{public}@",
+                             releaseError.localizedDescription);
+            }
+        }
+        return 0;
+    }
+
+    RTCAudioSession *session = [RTCAudioSession sharedInstance];
+    [session lockForConfiguration];
+
+    NSError *error = nil;
+    if (!nowActive) {
+        if (self.autoSessionHoldsActivation && [policy[@"deactivateOnStop"] boolValue]) {
+            os_log(ADMObserverLog(), "Native auto-config: deactivating audio session");
+            NSError *deactivateError = nil;
+            [session setActive:NO error:&deactivateError];
+            // RTCAudioSession decrements its activation count even when the OS
+            // session is already inactive (e.g. an interruption cleared it) or the
+            // call fails, so the hold is released in every outcome.
+            self.autoSessionHoldsActivation = NO;
+            if (deactivateError != nil) {
+                // Deliberately not propagated. By the time didDisable fires the
+                // engine's disable work is already done and the activation count is
+                // already released, so libwebrtc has nothing it could roll back. A
+                // non-zero return would only desync its logical engine state from
+                // hardware that is already stopped.
+                os_log_error(ADMObserverLog(),
+                             "Native auto-config: deactivation failed (continuing): %{public}@",
+                             deactivateError.localizedDescription);
+            }
+        }
+    } else {
+        // Recording uses the duplex (playAndRecord) config, while playout-only uses
+        // the playback config. Both are supplied by the SDK in automaticAudioSessionConfig.
+        NSDictionary *cfg = isRecordingEnabled ? policy[@"recording"] : policy[@"playout"];
+        RTCAudioSessionConfiguration *rtcConfig = [RTCAudioSessionConfiguration webRTCConfiguration];
+        if (cfg[@"audioCategory"] != nil) {
+            rtcConfig.category = [self avAudioSessionCategoryFromString:cfg[@"audioCategory"]];
+        }
+        if (cfg[@"audioMode"] != nil) {
+            rtcConfig.mode = [self avAudioSessionModeFromString:cfg[@"audioMode"]];
+        }
+        if (cfg[@"audioCategoryOptions"] != nil) {
+            rtcConfig.categoryOptions = [self avAudioSessionCategoryOptionsFromStrings:cfg[@"audioCategoryOptions"]];
+        }
+        os_log(ADMObserverLog(), "Native auto-config: setting category %{public}@", rtcConfig.category);
+        [session setConfiguration:rtcConfig error:&error];
+        if (error == nil && !session.isActive) {
+            BOOL hadHold = self.autoSessionHoldsActivation;
+            os_log(ADMObserverLog(), "Native auto-config: activating audio session");
+            [session setActive:YES error:&error];
+            if (error == nil) {
+                if (hadHold) {
+                    // An interruption or an external deactivation (e.g. CallKit)
+                    // cleared isActive while our activation count was still held, so
+                    // the successful reactivation above stacked a second count onto
+                    // the same hold. Drop the extra count. The drop is a pure
+                    // decrement while the count sits above one, so the session stays
+                    // active.
+                    //
+                    // Ordered activate-first deliberately. Releasing before
+                    // reactivating would zero the count whenever the reactivation
+                    // fails, and RTCAudioSession's interruption-end recovery
+                    // deactivates outright at count zero. A failure must leave the
+                    // prior hold untouched for that recovery to restore it.
+                    os_log(ADMObserverLog(), "Native auto-config: dropping extra count after reactivating");
+                    NSError *dropError = nil;
+                    [session setActive:NO error:&dropError];
+                    if (!session.isActive) {
+                        // The drop deactivated, which means the held count had
+                        // already been consumed by an external unmatched release and
+                        // the drop just gave back the count the reactivation took.
+                        // Reactivate and keep that single fresh count as the hold,
+                        // so even a stale hold converges to a balanced state.
+                        os_log(ADMObserverLog(), "Native auto-config: reactivating after dropping a stale hold");
+                        [session setActive:YES error:&error];
+                    }
+                }
+                if (error == nil) {
+                    self.autoSessionHoldsActivation = YES;
+                }
+            }
+        }
+    }
+
+    [session unlockForConfiguration];
+
+    if (error != nil) {
+        os_log_error(ADMObserverLog(), "Native auto-config failed: %{public}@", error.localizedDescription);
+        return kAutomaticAudioSessionConfigError;
+    }
+
+    return 0;
+}
+
+// TODO: this friendly-string -> AVAudioSession mapping mirrors AudioUtils in the
+// LiveKit React Native SDK. Keep the accepted values in sync, or consolidate by
+// pushing raw AVAudioSession values across the bridge instead.
+- (NSString *)avAudioSessionCategoryFromString:(NSString *)value {
+    static NSDictionary<NSString *, NSString *> *map;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        map = @{
+            @"ambient" : AVAudioSessionCategoryAmbient,
+            @"soloAmbient" : AVAudioSessionCategorySoloAmbient,
+            @"playback" : AVAudioSessionCategoryPlayback,
+            @"record" : AVAudioSessionCategoryRecord,
+            @"playAndRecord" : AVAudioSessionCategoryPlayAndRecord,
+            @"multiRoute" : AVAudioSessionCategoryMultiRoute,
+        };
+    });
+    return map[value] ?: AVAudioSessionCategoryPlayAndRecord;
+}
+
+- (NSString *)avAudioSessionModeFromString:(NSString *)value {
+    static NSDictionary<NSString *, NSString *> *map;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        map = @{
+            @"default" : AVAudioSessionModeDefault,
+            @"voiceChat" : AVAudioSessionModeVoiceChat,
+            @"videoChat" : AVAudioSessionModeVideoChat,
+            @"gameChat" : AVAudioSessionModeGameChat,
+            @"videoRecording" : AVAudioSessionModeVideoRecording,
+            @"measurement" : AVAudioSessionModeMeasurement,
+            @"moviePlayback" : AVAudioSessionModeMoviePlayback,
+            @"spokenAudio" : AVAudioSessionModeSpokenAudio,
+            @"voicePrompt" : AVAudioSessionModeVoicePrompt,
+        };
+    });
+    return map[value] ?: AVAudioSessionModeDefault;
+}
+
+- (AVAudioSessionCategoryOptions)avAudioSessionCategoryOptionsFromStrings:(NSArray<NSString *> *)options {
+    AVAudioSessionCategoryOptions result = 0;
+    for (NSString *option in options) {
+        if ([option isEqualToString:@"mixWithOthers"]) {
+            result |= AVAudioSessionCategoryOptionMixWithOthers;
+        } else if ([option isEqualToString:@"duckOthers"]) {
+            result |= AVAudioSessionCategoryOptionDuckOthers;
+        } else if ([option isEqualToString:@"allowBluetooth"]) {
+            result |= AVAudioSessionCategoryOptionAllowBluetooth;
+        } else if ([option isEqualToString:@"allowBluetoothA2DP"]) {
+            result |= AVAudioSessionCategoryOptionAllowBluetoothA2DP;
+        } else if ([option isEqualToString:@"allowAirPlay"]) {
+            result |= AVAudioSessionCategoryOptionAllowAirPlay;
+        } else if ([option isEqualToString:@"defaultToSpeaker"]) {
+            result |= AVAudioSessionCategoryOptionDefaultToSpeaker;
+        } else if ([option isEqualToString:@"interruptSpokenAudioAndMixWithOthers"]) {
+            result |= AVAudioSessionCategoryOptionInterruptSpokenAudioAndMixWithOthers;
+        }
+    }
+    return result;
 }
 
 @end

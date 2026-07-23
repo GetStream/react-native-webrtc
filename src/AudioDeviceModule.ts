@@ -26,10 +26,93 @@ export const AudioEngineAvailability = {
 } as const;
 
 /**
+ * Accepted values mirror the native observer's friendly-name maps. Unknown
+ * values never reach the session: categories fall back to playAndRecord and
+ * modes to default, and the literal unions below reject them at compile time.
+ */
+export type AutomaticAppleAudioCategory =
+  | 'ambient'
+  | 'soloAmbient'
+  | 'playback'
+  | 'record'
+  | 'playAndRecord'
+  | 'multiRoute';
+
+export type AutomaticAppleAudioMode =
+  | 'default'
+  | 'voiceChat'
+  | 'videoChat'
+  | 'gameChat'
+  | 'videoRecording'
+  | 'measurement'
+  | 'moviePlayback'
+  | 'spokenAudio'
+  | 'voicePrompt';
+
+export type AutomaticAppleAudioCategoryOption =
+  | 'mixWithOthers'
+  | 'duckOthers'
+  | 'allowBluetooth'
+  | 'allowBluetoothA2DP'
+  | 'allowAirPlay'
+  | 'defaultToSpeaker'
+  | 'interruptSpokenAudioAndMixWithOthers';
+
+/**
+ * Apple audio session configuration for a single engine state. Matches the
+ * AppleAudioConfiguration shape used by AudioSession.setAppleAudioConfiguration.
+ */
+export interface AutomaticAppleAudioConfiguration {
+  audioCategory?: AutomaticAppleAudioCategory;
+  audioMode?: AutomaticAppleAudioMode;
+  audioCategoryOptions?: AutomaticAppleAudioCategoryOption[];
+}
+
+/**
+ * Native default audio-session policy. When set, the native observer configures
+ * the AVAudioSession in willEnable/didDisable without a JS round trip.
+ * - `recording` is applied while recording is enabled,
+ * - `playout` is applied while only playout is enabled,
+ * - `deactivateOnStop` determines whether the session is deactivated when
+ *   neither recording nor playout is enabled.
+ */
+export interface AutomaticAudioSessionConfiguration {
+  recording: AutomaticAppleAudioConfiguration;
+  playout: AutomaticAppleAudioConfiguration;
+  deactivateOnStop: boolean;
+}
+
+/**
  * Audio Device Module API for controlling audio devices and settings.
  * iOS/macOS only - will throw on Android.
  */
 export class AudioDeviceModule {
+    /**
+     * Push (or clear with null) the native default audio-session configuration
+     * policy. When set, the native observer configures the session itself in
+     * willEnable/didDisable, removing the JS round trip from the default path.
+     * iOS only (including tvOS), a no-op elsewhere. The macOS build excludes
+     * the audio device module natives, so this must not reach the bridge there.
+     *
+     * Handler precedence is per hook:
+     * while a policy is set, custom willEnable/didDisable handlers must be
+     * registered or cleared as a pair, otherwise one regime can activate the
+     * session while the other never releases it.
+     *
+     * Clearing a `deactivateOnStop: false` policy while the engine is already
+     * stopped (playout and recording both disabled) keeps the session activation
+     * held until the next engine cycle, because no callback fires in between.
+     * For an immediate release, stop under `deactivateOnStop: true` before
+     * clearing.
+     */
+    static setAutomaticAudioSessionConfiguration(config: AutomaticAudioSessionConfiguration | null): void {
+        if (Platform.OS !== 'ios' || !WebRTCModule) {
+            return;
+        }
+
+        WebRTCModule.audioDeviceModuleSetAutomaticAudioSessionConfiguration(config);
+    }
+
     /**
      * Start audio playback
      */
