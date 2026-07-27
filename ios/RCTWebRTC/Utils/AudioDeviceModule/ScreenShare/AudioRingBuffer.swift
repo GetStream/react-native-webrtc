@@ -102,6 +102,21 @@ final class AudioRingBuffer {
         return toRead
     }
 
+    /// Drops the oldest samples so that at most `maxFrames` remain buffered.
+    /// Bounds end-to-end latency and prevents the buffer from pinning full when
+    /// the producer runs slightly ahead of the consumer (clock drift).
+    /// - Returns: the number of frames dropped.
+    @discardableResult
+    func trim(toMaxFrames maxFrames: Int) -> Int {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        let avail = _availableToRead
+        guard avail > maxFrames else { return 0 }
+        let toDrop = avail - maxFrames
+        readPos = (readPos + toDrop) % capacity
+        return toDrop
+    }
+
     // MARK: - Reset
 
     /// Clears all buffered data. Call when not concurrently accessed by both
