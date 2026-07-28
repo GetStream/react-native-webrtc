@@ -17,13 +17,8 @@ jobs:
   ios-compile:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
-
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22.x'
-        cache: 'npm'
-        cache-dependency-path: '**/package-lock.json'
+    - uses: actions/checkout@v6
+    - uses: ./.github/actions/setup-node
 
     - name: Get Xcode version
       id: xcode
@@ -38,9 +33,6 @@ jobs:
         key: ${{ runner.os }}-xcode-${{ steps.xcode.outputs.version }}-pods-${{ hashFiles('examples/GumTestApp/ios/Podfile', 'stream-react-native-webrtc.podspec', 'examples/GumTestApp/package.json') }}
         restore-keys: |
           ${{ runner.os }}-xcode-${{ steps.xcode.outputs.version }}-pods-
-
-    - name: Install node modules
-      run: npm install
 
     - name: Install example node modules
       working-directory: ./examples/GumTestApp/
