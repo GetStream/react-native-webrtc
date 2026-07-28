@@ -10,6 +10,15 @@ on:
 permissions:
   id-token: write # Required for npm Trusted Publishing (OIDC) + provenance
   contents: write # Required to push the changelog/version commit + create the GH Release
+  issues: write # @semantic-release/github comments on / labels released issues
+  pull-requests: write # ...and on released pull requests
+
+# Never cancel a release in flight: semantic-release pushes the tag and release
+# commit before it publishes, so a cancelled run can leave the repo tagged with
+# nothing on npm. Queue instead.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   package_release:
