@@ -264,9 +264,9 @@ import WebRTC
         /// - `.restartEngine`: rebuilds the whole graph and requires explicit calling of
         /// `initAndStartRecording` .
         _ = source.setMuteMode(isPreferred ? .inputMixer : .voiceProcessing)
-        /// - Important: We can probably set this one to false when the user doesn't have
-        /// sendAudio capability.
-        _ = source.setRecordingAlwaysPreparedMode(false)
+        if isPreferred {
+            _ = source.setRecordingAlwaysPreparedMode(false)
+        }
         source.prefersStereoPlayout = isPreferred
         source.isVoiceProcessingBypassed = isPreferred
     }
@@ -343,6 +343,30 @@ import WebRTC
     /// Forces the ADM to recompute whether stereo output is supported.
     @objc public func refreshStereoPlayoutState() {
         source.refreshStereoPlayoutState()
+    }
+
+    /// Gates whether the internal `AVAudioEngine` may start/stop for input and output.
+    ///
+    /// This flag has the highest priority over any API that may start the engine
+    /// (e.g., enabling the mic, ``startLocalRecording()``, or starting playback).
+    ///
+    /// - Behavior:
+    ///   - When set to a disabled availability, the engine will stop if running,
+    ///     and it will not start, even if recording or playback is requested.
+    ///   - When set back to enabled, the engine will start as soon as possible
+    ///     if recording and/or playback had been previously requested while disabled
+    ///     (i.e., pending requests are honored once availability allows).
+    ///
+    /// This is useful when you need to set up connections without touching the audio
+    /// device yet (e.g., CallKit flows), or to guarantee the engine remains off
+    /// regardless of subscription/publication requests.
+    public func setEngineAvailability(_ availability: RTCAudioEngineAvailability) -> Int {
+        source.setEngineAvailability(availability)
+    }
+
+    /// The current engine availability for input and output.
+    public var engineAvailability: RTCAudioEngineAvailability {
+        source.engineAvailability
     }
 
     // MARK: - RTCAudioDeviceModuleDelegate
