@@ -19,8 +19,10 @@ import MediaStreamTrackEvent from './MediaStreamTrackEvent';
 import permissions from './Permissions';
 import RTCAudioSession from './RTCAudioSession';
 import RTCCertificate from './RTCCertificate';
+import RTCDtlsTransport from './RTCDtlsTransport';
 import RTCErrorEvent from './RTCErrorEvent';
 import RTCIceCandidate from './RTCIceCandidate';
+import RTCIceTransport from './RTCIceTransport';
 import RTCPeerConnection from './RTCPeerConnection';
 import RTCRtpEncodingParameters, { type RTCRtpEncodingParametersInit } from './RTCRtpEncodingParameters';
 import RTCRtpReceiver from './RTCRtpReceiver';
@@ -44,6 +46,8 @@ export {
     RTCPeerConnection,
     RTCSessionDescription,
     RTCCertificate,
+    RTCDtlsTransport,
+    RTCIceTransport,
     RTCView,
     ScreenCapturePickerView,
     RTCRtpEncodingParameters,
@@ -94,6 +98,8 @@ function registerGlobals(): void {
     global.RTCRtpTransceiver = RTCRtpTransceiver;
     global.RTCRtpReceiver = RTCRtpReceiver;
     global.RTCRtpSender = RTCRtpSender;
+    global.RTCDtlsTransport = RTCDtlsTransport;
+    global.RTCIceTransport = RTCIceTransport;
     global.RTCErrorEvent = RTCErrorEvent;
 
     // Ensure audioDeviceModuleEvents is initialized and event listeners are registered

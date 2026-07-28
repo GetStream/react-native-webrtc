@@ -893,6 +893,37 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
     });
 }
 
+// Serializes an RTCIceCandidate into the same shape used by the
+// peerConnectionGotICECandidate event, returning NSNull for a nil candidate so
+// the JS side receives `null` instead of crashing the dictionary literal.
+- (id)serializeIceCandidate:(RTCIceCandidate *)candidate {
+    if (!candidate) {
+        return [NSNull null];
+    }
+    return @{
+        @"candidate" : candidate.sdp ?: @"",
+        @"sdpMLineIndex" : @(candidate.sdpMLineIndex),
+        @"sdpMid" : candidate.sdpMid ?: [NSNull null]
+    };
+}
+
+- (void)peerConnection:(RTCPeerConnection *)peerConnection
+    didChangeLocalCandidate:(RTCIceCandidate *)local
+            remoteCandidate:(RTCIceCandidate *)remote
+             lastReceivedMs:(int)lastDataReceivedMs
+               changeReason:(NSString *)reason {
+    dispatch_async(self.workerQueue, ^{
+        [self sendEventWithName:kEventPeerConnectionSelectedCandidatePairChanged
+                           body:@{
+                               @"pcId" : peerConnection.reactTag,
+                               @"local" : [self serializeIceCandidate:local],
+                               @"remote" : [self serializeIceCandidate:remote],
+                               @"lastDataReceivedMs" : @(lastDataReceivedMs),
+                               @"reason" : reason ?: @""
+                           }];
+    });
+}
+
 - (void)peerConnection:(RTCPeerConnection *)peerConnection didOpenDataChannel:(RTCDataChannel *)dataChannel {
     dispatch_async(self.workerQueue, ^{
         NSString *reactTag = [[NSUUID UUID] UUIDString];
