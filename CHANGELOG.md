@@ -1,3 +1,9 @@
+## [145.1.1](https://github.com/GetStream/react-native-webrtc/compare/v145.1.0...v145.1.1) (2026-07-29)
+
+### Bug Fixes
+
+* rare crashes on iOS AVAudioEngine with webrtc 145.12.0 update ([c65cd0f](https://github.com/GetStream/react-native-webrtc/commit/c65cd0fae5882c92b9c9810986af1ab0c7f36deb))
+
 ## [145.1.0](https://github.com/GetStream/react-native-webrtc/compare/v145.0.0...v145.1.0) (2026-07-29)
 
 ### Features
