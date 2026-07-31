@@ -53,7 +53,7 @@
     "build": "bob build",
     "lint": "eslint --max-warnings 0 . && tsc --noEmit",
     "lintfix": "eslint --max-warnings 0 --fix . && tsc --noEmit",
-    "prepare": "husky install && bob build",
+    "prepare": "husky install && bob build && node tools/postbuild.mjs",
     "format": "tools/format.sh",
     "semantic-release": "semantic-release"
   },
