@@ -1,6 +1,6 @@
 {
   "name": "@stream-io/react-native-webrtc",
-  "version": "145.0.0",
+  "version": "145.1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GetStream/react-native-webrtc.git"
@@ -20,8 +20,8 @@
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
   "dependencies": {
-    "base64-js": "1.5.1",
-    "debug": "4.3.4"
+    "base64-js": "^1.5.1",
+    "debug": "^4.4.3"
   },
   "peerDependencies": {
     "react-native": ">=0.73.0"
@@ -50,26 +50,32 @@
     "!**/.*"
   ],
   "scripts": {
+    "build": "bob build",
     "lint": "eslint --max-warnings 0 . && tsc --noEmit",
     "lintfix": "eslint --max-warnings 0 --fix . && tsc --noEmit",
     "prepare": "husky install && bob build",
-    "format": "tools/format.sh"
+    "format": "tools/format.sh",
+    "semantic-release": "semantic-release"
   },
   "bugs": {
     "url": "https://github.com/GetStream/react-native-webrtc/issues"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "@types/debug": "4.1.7",
     "@types/react": "^19.1.8",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
     "@typescript-eslint/parser": "^5.39.0",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "eslint": "^8.24.0",
     "eslint-plugin-import": "^2.26.0",
     "husky": "7.0.2",
     "lint-staged": "11.2.3",
     "prettier": "2.4.1",
     "react-native": "0.80.1",
-    "react-native-builder-bob": "0.18.2",
+    "react-native-builder-bob": "^0.43.0",
+    "semantic-release": "^25.0.8",
     "typescript": "^5.8.3"
   },
   "lint-staged": {

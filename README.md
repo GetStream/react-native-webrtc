@@ -2,58 +2,19 @@
 
 # React-Native-WebRTC
 
-[![npm version](https://img.shields.io/npm/v/react-native-webrtc)](https://www.npmjs.com/package/react-native-webrtc)
-[![npm downloads](https://img.shields.io/npm/dm/react-native-webrtc)](https://www.npmjs.com/package/react-native-webrtc)
-[![Discourse topics](https://img.shields.io/discourse/topics?server=https%3A%2F%2Freact-native-webrtc.discourse.group%2F)](https://react-native-webrtc.discourse.group/)
+[![npm version](https://img.shields.io/npm/v/@stream-io/react-native-webrtc)](https://www.npmjs.com/package/@stream-io/react-native-webrtc)
+[![npm downloads](https://img.shields.io/npm/dm/@stream-io/react-native-webrtc)](https://www.npmjs.com/package/@stream-io/react-native-webrtc)
 
-A WebRTC module for React Native.
-
-## Feature Overview
-
-|  | Android | iOS | tvOS | macOS* | Windows* | Web* | Expo* |
-| :- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| Audio/Video | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | - | - | :heavy_check_mark: | :heavy_check_mark: |
-| Data Channels | :heavy_check_mark: | :heavy_check_mark: | - | - | - | :heavy_check_mark: | :heavy_check_mark: |
-| Screen Capture | :heavy_check_mark: | :heavy_check_mark: | - | - | - | :heavy_check_mark: | :heavy_check_mark: |
-| Plan B | - | - | - | - | - | - | - |
-| Unified Plan* | :heavy_check_mark: | :heavy_check_mark: | - | - | - | :heavy_check_mark: | :heavy_check_mark: |
-| Simulcast* | :heavy_check_mark: | :heavy_check_mark: | - | - | - | :heavy_check_mark: | :heavy_check_mark: |
-
-> **macOS** - We don't currently actively support macOS at this time.  
-Support might return in the future.
-
-> **Windows** - We don't currently support the [react-native-windows](https://github.com/microsoft/react-native-windows) platform at this time.  
-Anyone interested in getting the ball rolling? We're open to contributions.
-
-> **Web** - The [react-native-webrtc-web-shim](https://github.com/react-native-webrtc/react-native-webrtc-web-shim) project provides a shim for [react-native-web](https://github.com/necolas/react-native-web) support.  
-Which will allow you to use [(almost)](https://github.com/react-native-webrtc/react-native-webrtc-web-shim/tree/main#setup) the exact same code in your [react-native-web](https://github.com/necolas/react-native-web) project as you would with [react-native](https://reactnative.dev/) directly.  
-
-> **Expo** - As this module includes native code it is not available in the [Expo Go](https://expo.dev/client) app by default.  
-However you can get things working via the [expo-dev-client](https://docs.expo.dev/development/getting-started/) library and out-of-tree [config-plugins/react-native-webrtc](https://github.com/expo/config-plugins/tree/master/packages/react-native-webrtc) package.  
-
-> **Unified Plan** - As of version 106.0.0 Unified Plan is the only supported mode.  
-Those still in need of Plan B will need to use an older release.
-
-> **Simulcast** - As of version 111.0.0 Simulcast is now possible with ease.  
-Software encode/decode factories have been enabled by default.
-
-## WebRTC Revision
-
-* Currently used revision: [M124](https://github.com/jitsi/webrtc/tree/M124)
-* Supported architectures
-  * Android: armeabi-v7a, arm64-v8a, x86, x86_64
-  * iOS: arm64, x86_64
-  * tvOS: arm64
-  * macOS: arm64, x86_64
+A WebRTC module for React Native tailored for the [`@stream-io/video-react-native-sdk`](https://github.com/GetStream/stream-video-js) needs.
 
 ## Getting Started
 
 Use one of the following preferred package install methods to immediately get going.  
-Don't forget to follow platform guides below to cover any extra required steps.  
+Don't forget to follow platform guides below to cover any extra required steps.
 
-**npm:** `npm install react-native-webrtc --save`  
-**yarn:** `yarn add react-native-webrtc`  
-**pnpm:** `pnpm install react-native-webrtc`  
+**npm:** `npm install @stream-io/react-native-webrtc --save`  
+**yarn:** `yarn add @stream-io/react-native-webrtc`  
+**pnpm:** `pnpm install @stream-io/react-native-webrtc`
 
 ## Guides
 
@@ -68,18 +29,37 @@ Don't forget to follow platform guides below to cover any extra required steps.
 ## Example Projects
 
 We have some very basic example projects included in the [examples](./examples) directory.  
-Don't worry, there are plans to include a much more broader example with backend included.  
+Don't worry, there are plans to include a much more broader example with backend included.
 
-## Community
+## Releasing
 
-Come join our [Discourse Community](https://react-native-webrtc.discourse.group/) if you want to discuss any React Native and WebRTC related topics.  
-Everyone is welcome and every little helps.  
+Releases are automated with [semantic-release](https://semantic-release.gitbook.io/) via the
+[`Release`](./.github/workflows/release.yml) workflow, which is triggered manually from the
+Actions tab (**Run workflow**).
 
-## Picture-in-Picture (PIP)
+There is no channel input — **the branch you dispatch from selects the release channel**, using
+the *"Use workflow from"* branch dropdown:
 
-This package does not include a built-in PIP implementation. PIP support is available via [`@stream-io/video-react-native-sdk`](https://github.com/GetStream/stream-video-js).
+| Dispatch from | Version | npm dist-tag |
+| :- | :- | :- |
+| `master` | `145.1.0` | `latest` |
+| `beta` | `145.1.0-beta.1` | `beta` |
+| `alpha` | `145.1.0-alpha.1` | `alpha` |
+| `<major>.x` (e.g. `145.x`) | `145.0.1` | `145.x` |
+
+A branch only appears in the dropdown once it exists on the remote and contains the workflow
+file, so `alpha`/`beta`/`<major>.x` need to be branched off `master` before their first use.
+
+Tick **`dry_run`** to run `semantic-release --dry-run`: it computes the next version and prints
+the release notes without publishing, tagging, or pushing.
+
+The version is derived from the [Conventional Commits](https://www.conventionalcommits.org/)
+since the last tag — never by hand-editing `package.json`. `feat:` yields a minor, `fix:` a
+patch, and `refactor:` and any `deps`-scoped commit also yield a patch. Publishing uses npm
+[Trusted Publishing](https://docs.npmjs.com/trusted-publishers) (OIDC), so no npm token is
+involved.
 
 ## Related Projects
 
 Looking for extra functionality coverage?  
-The [react-native-webrtc](https://github.com/react-native-webrtc) organization provides a number of packages which are more than useful when developing Real Time Communication applications.  
+The [react-native-webrtc](https://github.com/react-native-webrtc) organization provides a number of packages which are more than useful when developing Real Time Communication applications.
