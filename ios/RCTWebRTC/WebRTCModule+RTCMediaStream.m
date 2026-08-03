@@ -724,8 +724,8 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetVideoEffects
     if (session.category != AVAudioSessionCategoryPlayAndRecord) {
         [session lockForConfiguration];
         config.category = AVAudioSessionCategoryPlayAndRecord;
-        config.categoryOptions =
-            AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionDefaultToSpeaker;
+        config.categoryOptions = AVAudioSessionCategoryOptionAllowBluetooth |
+            AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionMixWithOthers;
         config.mode = AVAudioSessionModeVideoChat;
         NSError *error = nil;
         bool success = [session setCategory:config.category withOptions:config.categoryOptions error:&error];
