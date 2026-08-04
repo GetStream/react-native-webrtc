@@ -1,3 +1,9 @@
+## [145.2.0](https://github.com/GetStream/react-native-webrtc/compare/v145.1.1...v145.2.0) (2026-08-04)
+
+### Features
+
+* added audio capture for ios broadcast screensharing mode ([#58](https://github.com/GetStream/react-native-webrtc/issues/58)) ([aa011d1](https://github.com/GetStream/react-native-webrtc/commit/aa011d11dc3c7d12ad6ee322ab8a97d6cd46621d))
+
 ## [145.1.1](https://github.com/GetStream/react-native-webrtc/compare/v145.1.0...v145.1.1) (2026-07-29)
 
 ### Bug Fixes
