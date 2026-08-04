@@ -53,7 +53,12 @@ enum ScreenAudioWireFormat {
 
     @objc public func start() {
         guard let path = Self.audioSocketPath() else { return }
-        
+
+        // Close any prior connection before replacing it. `SocketConnection` has
+        // a retain cycle and no dealloc, so overwriting it without close() leaks
+        // the socket, streams, and network thread permanently.
+        stop()
+
         let connection = SocketConnection(filePath: path)
         self.connection = connection
         accumulator.removeAll(keepingCapacity: true)
@@ -205,6 +210,7 @@ extension ScreenAudioCapture: StreamDelegate {
             stop()
         case .errorOccurred:
             NSLog("[SSAudio][Recv] audio socket stream error: %@", aStream.streamError?.localizedDescription ?? "")
+            stop()
         default:
             break
         }
