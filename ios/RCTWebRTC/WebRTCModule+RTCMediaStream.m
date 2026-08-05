@@ -60,7 +60,7 @@
 #pragma mark - getUserMedia
 
 - (NSString *)convertBoolToString:(id)value {
-    return value ? @"true" : @"false";
+    return [value boolValue] ? @"true" : @"false";
 }
 
 /**
