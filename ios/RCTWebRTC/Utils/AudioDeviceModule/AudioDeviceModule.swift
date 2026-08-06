@@ -358,6 +358,30 @@ import WebRTC
         source.refreshStereoPlayoutState()
     }
 
+    /// Gates whether the internal `AVAudioEngine` may start/stop for input and output.
+    ///
+    /// This flag has the highest priority over any API that may start the engine
+    /// (e.g., enabling the mic, ``startLocalRecording()``, or starting playback).
+    ///
+    /// - Behavior:
+    ///   - When set to a disabled availability, the engine will stop if running,
+    ///     and it will not start, even if recording or playback is requested.
+    ///   - When set back to enabled, the engine will start as soon as possible
+    ///     if recording and/or playback had been previously requested while disabled
+    ///     (i.e., pending requests are honored once availability allows).
+    ///
+    /// This is useful when you need to set up connections without touching the audio
+    /// device yet (e.g., CallKit flows), or to guarantee the engine remains off
+    /// regardless of subscription/publication requests.
+    public func setEngineAvailability(_ availability: RTCAudioEngineAvailability) -> Int {
+        source.setEngineAvailability(availability)
+    }
+
+    /// The current engine availability for input and output.
+    public var engineAvailability: RTCAudioEngineAvailability {
+        source.engineAvailability
+    }
+
     // MARK: - RTCAudioDeviceModuleDelegate
 
     /// Receives speech activity notifications emitted by WebRTC VAD.

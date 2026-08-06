@@ -1,18 +1,18 @@
 {
-    "include": ["src/**/*.ts"],
-    "compilerOptions": {
-      "paths": {
-        "@stream-io/react-native-webrtc": ["./src/index"]
-      },
-      "target": "es6",
-      "module": "commonjs",
-      "strict": true,
-      "moduleResolution": "node",
-      "lib": ["es2015", "esnext"],
-      "jsx": "react-native",
-      "resolveJsonModule": true,
-      "noImplicitAny": false,
-      "skipLibCheck": true,
+  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "paths": {
+      "@stream-io/react-native-webrtc": ["./src/index"]
     },
-    "exclude": ["node_modules"]
+    "target": "es2022",
+    "module": "commonjs",
+    "strict": true,
+    "moduleResolution": "node",
+    "lib": ["es2022"],
+    "jsx": "react-native",
+    "resolveJsonModule": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true
+  },
+  "exclude": ["node_modules"]
 }
