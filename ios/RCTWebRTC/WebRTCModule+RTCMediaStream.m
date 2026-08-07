@@ -192,13 +192,23 @@
 #endif
 
     if (hasRuntimeVideoDevice) {
-        RTCCameraVideoCapturer *videoCapturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:videoSource];
-        VideoCaptureController *videoCaptureController =
-            [[VideoCaptureController alloc] initWithCapturer:videoCapturer andConstraints:constraints[@"video"]];
-        videoCaptureController.enableMultitaskingCameraAccess =
-            [WebRTCModuleOptions sharedInstance].enableMultitaskingCameraAccess;
-        videoTrack.captureController = videoCaptureController;
-        [videoCaptureController startCapture];
+        // If a lobby camera preview is already running, adopt its capturer by re-pointing it at 
+        // this track's video source. Falls back to creating a fresh capturer when there's no preview to adopt.
+        CaptureController *captureController = [self adoptActiveCameraPreviewForSource:videoSource];
+        if ([captureController isKindOfClass:[VideoCaptureController class]]) {
+            VideoCaptureController *videoCaptureController = (VideoCaptureController *)captureController;
+            videoTrack.captureController = videoCaptureController;
+            // Already capturing — do NOT startCapture again. Reconcile to the requested constraints.
+            [videoCaptureController applyConstraints:constraints[@"video"] error:nil];
+        } else {
+            RTCCameraVideoCapturer *videoCapturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:videoSource];
+            VideoCaptureController *videoCaptureController =
+                [[VideoCaptureController alloc] initWithCapturer:videoCapturer andConstraints:constraints[@"video"]];
+            videoCaptureController.enableMultitaskingCameraAccess =
+                [WebRTCModuleOptions sharedInstance].enableMultitaskingCameraAccess;
+            videoTrack.captureController = videoCaptureController;
+            [videoCaptureController startCapture];
+        }
     }
 
     // Add dimension detection for local video tracks immediately

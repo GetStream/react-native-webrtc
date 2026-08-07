@@ -64,6 +64,9 @@ public class GetUserMediaImpl {
     private final WebRTCModule webRTCModule;
 
     private Promise displayMediaPromise;
+    // The factory the in-flight getDisplayMedia call resolved to; used later by the async
+    // createScreenStream() (invoked from the MediaProjection service connection).
+    private PeerConnectionFactoryProvider displayMediaFactory;
     private Intent mediaProjectionPermissionResultData;
     private boolean createConfigForDefaultDisplay = false;
     private float resolutionScale = 1.0f;
@@ -103,6 +106,7 @@ public class GetUserMediaImpl {
                     if (resultCode != Activity.RESULT_OK) {
                         displayMediaPromise.reject("DOMException", "NotAllowedError");
                         displayMediaPromise = null;
+                        displayMediaFactory = null;
                         return;
                     }
 
@@ -114,13 +118,13 @@ public class GetUserMediaImpl {
         });
     }
 
-    private AudioTrack createAudioTrack(ReadableMap constraints) {
+    private AudioTrack createAudioTrack(ReadableMap constraints, PeerConnectionFactoryProvider factoryProvider) {
         ReadableMap audioConstraintsMap = constraints.getMap("audio");
 
         Log.d(TAG, "getUserMedia(audio): " + audioConstraintsMap);
 
         String id = UUID.randomUUID().toString();
-        PeerConnectionFactory pcFactory = webRTCModule.mFactory;
+        PeerConnectionFactory pcFactory = factoryProvider.factory;
         MediaConstraints peerConstraints = webRTCModule.constraintsForOptions(audioConstraintsMap);
 
         // Convert given constraints into the internal webrtc media constraints.
@@ -150,6 +154,7 @@ public class GetUserMediaImpl {
 
         // surfaceTextureHelper is initialized for videoTrack only, so its null here.
         tracks.put(id, new TrackPrivate(track, audioSource, /* videoCapturer */ null, /* surfaceTextureHelper */ null));
+        factoryProvider.ownedTrackIds.add(id);
 
         return track;
     }
@@ -229,12 +234,16 @@ public class GetUserMediaImpl {
      * if audio permission was not granted, there will be no "audio" key in
      * the constraints map.
      */
-    void getUserMedia(final ReadableMap constraints, final Callback successCallback, final Callback errorCallback) {
+    void getUserMedia(
+            final ReadableMap constraints,
+            final Callback successCallback,
+            final Callback errorCallback) {
+        final PeerConnectionFactoryProvider factoryProvider = webRTCModule.factoryRegistry.getOrCreateDefault();
         AudioTrack audioTrack = null;
         VideoTrack videoTrack = null;
 
         if (constraints.hasKey("audio")) {
-            audioTrack = createAudioTrack(constraints);
+            audioTrack = createAudioTrack(constraints, factoryProvider);
         }
 
         if (constraints.hasKey("video")) {
@@ -251,10 +260,20 @@ public class GetUserMediaImpl {
                 return;
             }
 
-            CameraCaptureController cameraCaptureController =
-                    new CameraCaptureController(currentActivity, getCameraEnumerator(), videoConstraintsMap);
+            // If a lobby camera preview is already running, adopt its camera session by routing its
+            // frames into this track's source; the camera keeps running. Falls back to creating a
+            // fresh capturer when there's no preview to adopt.
+            RTCCameraPreviewView preview = webRTCModule.getActiveCameraPreview();
+            if (preview != null) {
+                videoTrack = createVideoTrackFromPreview(preview, videoConstraintsMap, factoryProvider);
+            }
 
-            videoTrack = createVideoTrack(cameraCaptureController);
+            if (videoTrack == null) {
+                CameraCaptureController cameraCaptureController =
+                        new CameraCaptureController(currentActivity, getCameraEnumerator(), videoConstraintsMap);
+
+                videoTrack = createVideoTrack(cameraCaptureController, factoryProvider);
+            }
         }
 
         if (audioTrack == null && videoTrack == null) {
@@ -264,7 +283,7 @@ public class GetUserMediaImpl {
             return;
         }
 
-        createStream(new MediaStreamTrack[] {audioTrack, videoTrack}, (streamId, tracksInfo) -> {
+        createStream(new MediaStreamTrack[]{audioTrack, videoTrack}, factoryProvider, (streamId, tracksInfo) -> {
             WritableArray tracksInfoWritableArray = Arguments.createArray();
 
             for (WritableMap trackInfo : tracksInfo) {
@@ -292,6 +311,7 @@ public class GetUserMediaImpl {
         for (Map.Entry<String, TrackPrivate> entry : tracks.entrySet()) {
             try {
                 entry.getValue().dispose();
+                webRTCModule.factoryRegistry.forgetTrack(entry.getKey());
             } catch (Exception e) {
                 Log.w(TAG, "disposeAllTracks: error disposing " + entry.getKey(), e);
             }
@@ -303,6 +323,7 @@ public class GetUserMediaImpl {
         TrackPrivate track = tracks.remove(id);
         if (track != null) {
             track.dispose();
+            webRTCModule.factoryRegistry.forgetTrack(id);
         }
     }
 
@@ -375,6 +396,7 @@ public class GetUserMediaImpl {
         this.initializeConstraints(constraints);
 
         this.displayMediaPromise = promise;
+        this.displayMediaFactory = webRTCModule.factoryRegistry.getOrCreateDefault();
 
         MediaProjectionManager mediaProjectionManager =
                 (MediaProjectionManager) currentActivity.getApplication().getSystemService(
@@ -401,24 +423,27 @@ public class GetUserMediaImpl {
 
         } else {
             promise.reject(new RuntimeException("MediaProjectionManager is null."));
+            displayMediaPromise = null;
+            displayMediaFactory = null;
         }
     }
 
     private void createScreenStream() {
-        // Guards against onServiceConnected firing after invalidate() has disposed and nulled mFactory.
-        if (webRTCModule.mFactory == null) {
+        final PeerConnectionFactoryProvider factoryProvider = displayMediaFactory;
+        if (factoryProvider == null || factoryProvider.isDisposed()) {
             if (displayMediaPromise != null) {
                 displayMediaPromise.reject("ERR_MODULE_DISPOSED", "WebRTCModule disposed during getDisplayMedia");
                 displayMediaPromise = null;
             }
+            displayMediaFactory = null;
             return;
         }
-        VideoTrack track = createScreenTrack();
+        VideoTrack track = createScreenTrack(factoryProvider);
 
         if (track == null) {
             displayMediaPromise.reject(new RuntimeException("ScreenTrack is null."));
         } else {
-            createStream(new MediaStreamTrack[] {track}, (streamId, tracksInfo) -> {
+            createStream(new MediaStreamTrack[]{track}, factoryProvider, (streamId, tracksInfo) -> {
                 WritableMap data = Arguments.createMap();
 
                 data.putString("streamId", streamId);
@@ -437,11 +462,15 @@ public class GetUserMediaImpl {
         // It is retained so it can be reused to create a MediaProjection for
         // screen share audio capture (AudioPlaybackCaptureConfiguration).
         displayMediaPromise = null;
+        displayMediaFactory = null;
     }
 
-    void createStream(MediaStreamTrack[] tracks, BiConsumer<String, ArrayList<WritableMap>> successCallback) {
+    void createStream(
+        MediaStreamTrack[] tracks, 
+        PeerConnectionFactoryProvider factoryProvider,
+                      BiConsumer<String, ArrayList<WritableMap>> successCallback) {
         String streamId = UUID.randomUUID().toString();
-        MediaStream mediaStream = webRTCModule.mFactory.createLocalMediaStream(streamId);
+        MediaStream mediaStream = factoryProvider.factory.createLocalMediaStream(streamId);
 
         ArrayList<WritableMap> tracksInfo = new ArrayList<>();
 
@@ -487,16 +516,18 @@ public class GetUserMediaImpl {
         successCallback.accept(streamId, tracksInfo);
     }
 
-    private VideoTrack createScreenTrack() {
+    private VideoTrack createScreenTrack(PeerConnectionFactoryProvider factoryProvider) {
         DisplayMetrics displayMetrics = DisplayUtils.getDisplayMetrics(reactContext.getCurrentActivity());
         int width = displayMetrics.widthPixels;
         int height = displayMetrics.heightPixels;
         ScreenCaptureController screenCaptureController = new ScreenCaptureController(
                 reactContext.getCurrentActivity(), width, height, mediaProjectionPermissionResultData, resolutionScale);
-        return createVideoTrack(screenCaptureController);
+        return createVideoTrack(screenCaptureController, factoryProvider);
     }
 
-    VideoTrack createVideoTrack(AbstractVideoCaptureController videoCaptureController) {
+    VideoTrack createVideoTrack(
+            AbstractVideoCaptureController videoCaptureController,
+            PeerConnectionFactoryProvider factoryProvider) {
         videoCaptureController.initializeVideoCapturer();
 
         VideoCapturer videoCapturer = videoCaptureController.videoCapturer;
@@ -504,7 +535,7 @@ public class GetUserMediaImpl {
             return null;
         }
 
-        PeerConnectionFactory pcFactory = webRTCModule.mFactory;
+        PeerConnectionFactory pcFactory = factoryProvider.factory;
         EglBase.Context eglContext = EglUtils.getRootEglBaseContext();
         SurfaceTextureHelper surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglContext);
 
@@ -530,8 +561,59 @@ public class GetUserMediaImpl {
         track.setEnabled(true);
         tracks.put(id,
                 new TrackPrivate(track, videoSource, videoCaptureController, surfaceTextureHelper, localTrackAdapter));
+        factoryProvider.ownedTrackIds.add(id);
 
         videoCaptureController.startCapture();
+
+        return track;
+    }
+
+    /**
+     * Creates a camera video track by adopting an already-running lobby preview's camera session.
+     * The preview's capturer / surface texture helper / controller are reused as-is (already
+     * initialized and capturing); this track's {@link VideoSource} is attached as the downstream of
+     * the preview's {@link FanoutCapturerObserver}, so the camera is never stopped or reopened.
+     *
+     * @return the new video track, or null if the preview had nothing running to adopt (caller
+     * should then fall back to creating a fresh capturer).
+     */
+    VideoTrack createVideoTrackFromPreview(
+            RTCCameraPreviewView preview,
+            ReadableMap videoConstraintsMap,
+            PeerConnectionFactoryProvider factoryProvider) {
+        RTCCameraPreviewView.PreviewHandoff handoff = preview.yieldForAdoption();
+        if (handoff == null) {
+            return null;
+        }
+
+        PeerConnectionFactory pcFactory = factoryProvider.factory;
+        String id = UUID.randomUUID().toString();
+
+        TrackCapturerEventsEmitter eventsEmitter = new TrackCapturerEventsEmitter(webRTCModule, id);
+        handoff.controller.setCapturerEventsListener(eventsEmitter);
+
+        VideoSource videoSource = pcFactory.createVideoSource(false);
+        // Route the running capturer's frames into this track's source (in addition to the preview).
+        handoff.fanout.setDownstream(videoSource.getCapturerObserver());
+
+        VideoTrack track = pcFactory.createVideoTrack(id, videoSource);
+
+        VideoTrackAdapter localTrackAdapter = new VideoTrackAdapter(webRTCModule, -1);
+        localTrackAdapter.addDimensionDetector(track);
+
+        track.setEnabled(true);
+        // Reuse the preview's controller + surface texture helper; the capturer is already running,
+        // so do NOT call startCapture again.
+        tracks.put(id,
+                new TrackPrivate(track, videoSource, handoff.controller, handoff.surfaceTextureHelper,
+                        localTrackAdapter));
+        factoryProvider.ownedTrackIds.add(id);
+
+        // Reconcile to the call's requested constraints. CameraCaptureController.applyConstraints
+        // only acts on a delta
+        if (videoConstraintsMap != null) {
+            handoff.controller.applyConstraints(videoConstraintsMap, null);
+        }
 
         return track;
     }
@@ -542,7 +624,9 @@ public class GetUserMediaImpl {
             throw new IllegalArgumentException("No track found for id: " + trackId);
         }
 
-        PeerConnectionFactory pcFactory = webRTCModule.mFactory;
+        // A clone shares its parent's source, so it must come from the same (single live) factory.
+        PeerConnectionFactoryProvider factoryProvider = webRTCModule.factoryRegistry.getOrCreateDefault();
+        PeerConnectionFactory pcFactory = factoryProvider.factory;
 
         String id = UUID.randomUUID().toString();
         MediaStreamTrack nativeTrack = track.track;
@@ -567,6 +651,7 @@ public class GetUserMediaImpl {
                 clonedVideoTrackAdapter);
         clone.setParent(track);
         tracks.put(id, clone);
+        factoryProvider.ownedTrackIds.add(id);
 
         return clonedNativeTrack;
     }
@@ -574,8 +659,9 @@ public class GetUserMediaImpl {
     /**
      * Set video effects to the TrackPrivate corresponding to the trackId with the help of VideoEffectProcessor
      * corresponding to the names.
+     *
      * @param trackId TrackPrivate id
-     * @param names VideoEffectProcessor names
+     * @param names   VideoEffectProcessor names
      */
     void setVideoEffects(String trackId, ReadableArray names) {
         TrackPrivate track = tracks.get(trackId);

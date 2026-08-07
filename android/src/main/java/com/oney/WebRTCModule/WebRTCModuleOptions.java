@@ -7,7 +7,6 @@ import org.webrtc.Loggable;
 import org.webrtc.Logging;
 import org.webrtc.VideoDecoderFactory;
 import org.webrtc.VideoEncoderFactory;
-import org.webrtc.audio.AudioDeviceModule;
 import org.webrtc.audio.JavaAudioDeviceModule;
 
 import java.nio.ByteBuffer;
@@ -20,7 +19,6 @@ public class WebRTCModuleOptions {
 
     public VideoEncoderFactory videoEncoderFactory;
     public VideoDecoderFactory videoDecoderFactory;
-    public AudioDeviceModule audioDeviceModule;
     public Callable<AudioProcessingFactory> audioProcessingFactoryFactory;
 
     public Loggable injectableLogger;

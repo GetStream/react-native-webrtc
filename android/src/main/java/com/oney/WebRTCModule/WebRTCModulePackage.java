@@ -16,6 +16,6 @@ public class WebRTCModulePackage implements ReactPackage {
 
     @Override
     public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
-        return Arrays.<ViewManager>asList(new RTCVideoViewManager());
+        return Arrays.<ViewManager>asList(new RTCVideoViewManager(), new RTCCameraPreviewViewManager());
     }
 }
