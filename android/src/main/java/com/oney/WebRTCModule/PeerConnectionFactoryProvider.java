@@ -106,9 +106,9 @@ class PeerConnectionFactoryProvider {
             // bypassed pipeline, since the platform voice path is mono).
             builder.setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
-                    .setUseStereoInput(options.stereoInputEnabled)
                     .setUseStereoOutput(true)
-                    .setAudioSource(MediaRecorder.AudioSource.MIC)
+                    // .setUseStereoInput(options.stereoInputEnabled)
+                    // .setAudioSource(MediaRecorder.AudioSource.MIC)
                     .setOutputSampleRate(nativeOutputSampleRate(options.context));
         } else {
             // Default voice profile: hardware AEC/NS where the platform supports it.
