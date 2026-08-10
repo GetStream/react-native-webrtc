@@ -23,6 +23,8 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
     private var currentFactory: PeerConnectionFactoryProvider?
     private var currentIsBareForkDefault = false
     private var disposed = false
+    /// Number of live consumers sharing `currentFactory`. 
+    private var currentRefCount = 0
     // Recursive so the reentrant resolve() -> getOrCreateDefault() path doesn't deadlock.
     private let lock = NSRecursiveLock()
 
@@ -42,7 +44,7 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
                 // An op resolved to a lingering bare-fork default (no call factory ever took its
                 // place). Normal in bare-fork use; in the Stream SDK it means an op fired outside
                 // the join↔leave window. The build that created it already dumped a stack trace.
-                NSLog("[PCFactoryRegistry] ⚠️ op resolved to the bare-fork DEFAULT factory %@ (outside call window)",
+                NSLog("[PCFactoryRegistry] op resolved to the bare-fork DEFAULT factory %@ (outside call window)",
                       currentFactory.factoryId)
             }
             return currentFactory
@@ -78,8 +80,9 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
                 NSLog("[PCFactoryRegistry] disposed stale default before creating call factory")
                 existing.dispose()
             } else {
-                NSLog("[PCFactoryRegistry] ⚠️ call factory %@ already live; refusing to create a second — concurrent calls are unsupported",
-                      existing.factoryId)
+                currentRefCount += 1
+                NSLog("[PCFactoryRegistry] call factory %@ already live; sharing it across concurrent calls (refCount=%d)",
+                      existing.factoryId, currentRefCount)
                 return existing
             }
         }
@@ -91,20 +94,23 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
         let factory = builder(factoryId, bypassVoiceProcessing)
         currentFactory = factory
         currentIsBareForkDefault = isDefault
+        currentRefCount = 1
         let kind = isDefault ? "DEFAULT (bare-fork)" : "per-call"
-        NSLog("[PCFactoryRegistry] 🏭 CREATED %@ factory %@ (bypassVoiceProcessing=%@)",
+        NSLog("[PCFactoryRegistry] CREATED %@ factory %@ (bypassVoiceProcessing=%@)",
               kind, factoryId, bypassVoiceProcessing ? "true" : "false")
         if isDefault {
             // Should not happen during normal Stream SDK operation: every consumer resolves through
             // the live call factory built at join. A default build means something reached the
             // registry with no call factory present — dump the call stack so the caller is identifiable.
-            NSLog("[PCFactoryRegistry] ⚠️ default factory built with no call factory present. Trigger:\n%@",
+            NSLog("[PCFactoryRegistry] default factory built with no call factory present. Trigger:\n%@",
                   Thread.callStackSymbols.joined(separator: "\n"))
         }
         return factory
     }
 
-    /// Disposes the live call factory and clears it. Returns false when nothing is live.
+    /// Releases one consumer's reference to the live call factory. Actually disposes only when 
+    /// the LAST reference is released; when other concurrent-call consumers still
+    /// hold it, it decrements and keeps the factory alive. Also false when nothing is live.
     @objc public func disposeCurrent() -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -112,12 +118,19 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
             NSLog("[PCFactoryRegistry] disposeCurrent(): no live factory (already disposed?)")
             return false
         }
+        if currentRefCount > 1 {
+            currentRefCount -= 1
+            NSLog("[PCFactoryRegistry] disposeCurrent(): factory %@ still shared; kept (refCount=%d)",
+                  factory.factoryId, currentRefCount)
+            return false
+        }
         let wasDefault = currentIsBareForkDefault
         let factoryId = factory.factoryId
         factory.dispose()
         currentFactory = nil
         currentIsBareForkDefault = false
-        NSLog("[PCFactoryRegistry] 🗑️ DISPOSED %@ factory %@", wasDefault ? "DEFAULT (bare-fork)" : "per-call", factoryId)
+        currentRefCount = 0
+        NSLog("[PCFactoryRegistry] DISPOSED %@ factory %@", wasDefault ? "DEFAULT (bare-fork)" : "per-call", factoryId)
         return true
     }
 
@@ -127,9 +140,10 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
         disposed = true
         if let factory = currentFactory {
             factory.dispose()
-            NSLog("[PCFactoryRegistry] 🗑️ DISPOSED factory %@ (module teardown)", factory.factoryId)
+            NSLog("[PCFactoryRegistry] DISPOSED factory %@ (module teardown)", factory.factoryId)
         }
         currentFactory = nil
         currentIsBareForkDefault = false
+        currentRefCount = 0
     }
 }

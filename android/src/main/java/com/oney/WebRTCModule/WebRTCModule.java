@@ -161,8 +161,17 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
      * be disposed while PCs or tracks from it are still alive (use-after-free), so its dependents go
      * first. Shared by {@link #disposeCallFactory} (leave) and {@link #createCallFactory} (replacing a
      * stale bare-fork default at join).
+     *
+     * <p>Reference-counted: when the factory is shared by concurrent calls, only the LAST consumer's
+     * release actually tears it down. Earlier releases keep the factory (and its PCs/tracks) intact
+     * for the remaining call(s) — the leaving call's own PCs were already disposed by its {@code
+     * leave}, so its ids are gone from the owned sets before this runs.
      */
     private boolean disposeCurrentFactoryOrdered() {
+        if (!factoryRegistry.releaseReference()) {
+            return false;
+        }
+
         // 1. Dispose the factory's PeerConnections first.
         for (int pcId : factoryRegistry.currentOwnedPcIds()) {
             try {

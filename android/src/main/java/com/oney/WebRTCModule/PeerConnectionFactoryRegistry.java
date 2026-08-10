@@ -35,6 +35,9 @@ class PeerConnectionFactoryRegistry {
 
     private boolean disposed = false;
 
+    // Number of live consumers sharing {@link #currentFactory}
+    private int currentRefCount = 0;
+
     PeerConnectionFactoryRegistry(FactoryBuilder builder) {
         this.builder = builder;
     }
@@ -52,7 +55,7 @@ class PeerConnectionFactoryRegistry {
                 // An op resolved to a lingering bare-fork default (no call factory ever took its
                 // place). Normal in bare-fork use; in the Stream SDK it means an op fired outside
                 // the join↔leave window. The build that created it already dumped a stack trace.
-                Log.w(TAG, "⚠️ op resolved to the bare-fork DEFAULT factory " + currentFactory.id
+                Log.w(TAG, "op resolved to the bare-fork DEFAULT factory " + currentFactory.id
                         + " (outside call window)");
             }
             return currentFactory;
@@ -106,8 +109,9 @@ class PeerConnectionFactoryRegistry {
                     Log.w(TAG, "create(): error disposing stale default " + existing.id, e);
                 }
             } else {
-                Log.w(TAG, "⚠️ call factory " + existing.id
-                        + " already live; refusing to create a second — concurrent calls are unsupported");
+                currentRefCount++;
+                Log.w(TAG, "call factory " + existing.id + " already live; sharing it across "
+                        + "concurrent calls (refCount=" + currentRefCount + ")");
                 return existing;
             }
         }
@@ -120,14 +124,15 @@ class PeerConnectionFactoryRegistry {
         PeerConnectionFactoryProvider factory = builder.build(id, bypassVoiceProcessing, stereoInputEnabled);
         currentFactory = factory;
         currentIsBareForkDefault = isDefault;
+        currentRefCount = 1;
         String kind = isDefault ? "DEFAULT (bare-fork)" : "per-call";
-        Log.d(TAG, "🏭 CREATED " + kind + " factory " + id + " (bypassVoiceProcessing=" + bypassVoiceProcessing
+        Log.d(TAG, "CREATED " + kind + " factory " + id + " (bypassVoiceProcessing=" + bypassVoiceProcessing
                 + ", stereoInputEnabled=" + stereoInputEnabled + ")");
         if (isDefault) {
             // Should not happen during normal Stream SDK operation: every consumer resolves through
             // the live call factory built at join. A default build means something reached the
             // registry with no call factory present — dump the stack so the caller is identifiable.
-            Log.w(TAG, "⚠️ default factory built with no call factory present. Trigger:",
+            Log.w(TAG, "default factory built with no call factory present. Trigger:",
                     new Throwable("default factory creation trace"));
         }
         return factory;
@@ -174,6 +179,25 @@ class PeerConnectionFactoryRegistry {
         }
     }
 
+    /**
+     * Releases one consumer's reference to the live call factory. Actually disposes only when 
+     * the LAST reference is released; when other concurrent-call consumers still
+     * hold it, it decrements and keeps the factory alive. Also false when nothing is live.
+     */
+    synchronized boolean releaseReference() {
+        if (currentFactory == null) {
+            return false;
+        }
+        if (currentRefCount > 1) {
+            currentRefCount--;
+            Log.d(TAG, "releaseReference(): factory " + currentFactory.id
+                    + " still shared; kept (refCount=" + currentRefCount + ")");
+            return false;
+        }
+        currentRefCount = 0;
+        return true;
+    }
+
     synchronized boolean disposeCurrent() {
         if (currentFactory == null) {
             Log.w(TAG, "disposeCurrent(): no live factory (already disposed?)");
@@ -184,7 +208,8 @@ class PeerConnectionFactoryRegistry {
         currentFactory.dispose();
         currentFactory = null;
         currentIsBareForkDefault = false;
-        Log.d(TAG, "🗑️ DISPOSED " + (wasDefault ? "DEFAULT (bare-fork)" : "per-call") + " factory " + factoryId);
+        currentRefCount = 0;
+        Log.d(TAG, "DISPOSED " + (wasDefault ? "DEFAULT (bare-fork)" : "per-call") + " factory " + factoryId);
         return true;
     }
 
@@ -194,12 +219,13 @@ class PeerConnectionFactoryRegistry {
             String id = currentFactory.id;
             try {
                 currentFactory.dispose();
-                Log.d(TAG, "🗑️ DISPOSED factory " + id + " (module teardown)");
+                Log.d(TAG, "DISPOSED factory " + id + " (module teardown)");
             } catch (Exception e) {
                 Log.w(TAG, "disposeAll(): error disposing factory " + id, e);
             }
         }
         currentFactory = null;
         currentIsBareForkDefault = false;
+        currentRefCount = 0;
     }
 }
