@@ -1,3 +1,13 @@
+## [145.3.0](https://github.com/GetStream/react-native-webrtc/compare/v145.2.0...v145.3.0) (2026-08-12)
+
+### Features
+
+* hi-fi audio ([#50](https://github.com/GetStream/react-native-webrtc/issues/50)) ([1be1f5b](https://github.com/GetStream/react-native-webrtc/commit/1be1f5be8a14acbccf38bd0772fb65235ead170a))
+
+### Bug Fixes
+
+* iOS boolean conversion never parsed false ([#59](https://github.com/GetStream/react-native-webrtc/issues/59)) ([a0dac58](https://github.com/GetStream/react-native-webrtc/commit/a0dac58ae3f090ea0084c06ceb4a07934e88e73d))
+
 ## [145.2.0](https://github.com/GetStream/react-native-webrtc/compare/v145.1.1...v145.2.0) (2026-08-04)
 
 ### Features
