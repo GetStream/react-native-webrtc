@@ -253,6 +253,19 @@ import WebRTC
         _ = source.reset()
     }
 
+    /// Sets how the microphone is muted (voice-processing vs input-mixer vs engine restart).
+    /// - Returns: 0 on success, a non-zero WebRTC status otherwise.
+    @objc public func setMuteMode(_ mode: RTCAudioEngineMuteMode) -> Int {
+        source.setMuteMode(mode)
+    }
+
+    /// Keeps the recording (microphone-input) chain prepared even while muted, so the engine
+    /// stays full-duplex instead of tearing the input path down.
+    /// - Returns: 0 on success, a non-zero WebRTC status otherwise.
+    @objc public func setRecordingAlwaysPreparedMode(_ enabled: Bool) -> Int {
+        source.setRecordingAlwaysPreparedMode(enabled)
+    }
+
     /// Switches between stereo and mono playout while keeping the recording
     /// state consistent across reinitializations.
     /// - Parameter isPreferred: `true` when stereo output should be used.
