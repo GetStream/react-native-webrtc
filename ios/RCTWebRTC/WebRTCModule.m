@@ -9,6 +9,7 @@
 
 #import "AudioDeviceModuleObserver.h"
 #import "RTCCameraPreviewViewManager.h"
+#import "WebRTCModule+RTCMediaStream.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
@@ -199,6 +200,14 @@ RCT_EXPORT_METHOD(createCallFactory
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
     BOOL bypassVoiceProcessing = [options[@"bypassVoiceProcessing"] boolValue];
+
+    // This makes default factory being disposed in a proper sequence.
+    if ([self.factoryRegistry isBareForkDefaultLive]) {
+        RCTLogInfo(@"createCallFactory(): tearing down stale bare-fork default (ordered) before "
+                    "creating the call factory");
+        [self disposeCurrentFactoryOrdered];
+    }
+
     PeerConnectionFactoryProvider *factory = [self.factoryRegistry create:bypassVoiceProcessing];
     if (factory == nil) {
         reject(@"E_FACTORY_CREATE", @"Failed to create call factory: registry is disposed", nil);
@@ -210,7 +219,52 @@ RCT_EXPORT_METHOD(createCallFactory
 RCT_EXPORT_METHOD(disposeCallFactory
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    resolve(@([self.factoryRegistry disposeCurrent]));
+    resolve(@([self disposeCurrentFactoryOrdered]));
+}
+
+/**
+ * Disposes the live factory in order — PeerConnections, then local tracks, then the factory + its
+ * ADM — and returns whether a factory was disposed. An RTCPeerConnectionFactory must not be released
+ * while PeerConnections or tracks created from it are still alive (use-after-free in libwebrtc), so
+ * its dependents are torn down first. Shared by disposeCallFactory (leave) and createCallFactory
+ * (replacing a stale bare-fork default at join), mirroring Android's disposeCurrentFactoryOrdered.
+ *
+ * Reference-counted: when the factory is shared across concurrent calls, only the LAST consumer's
+ * release actually tears it down (releaseReference returns NO for earlier releases). On iOS the
+ * module's own peerConnections / localTracks maps are the factory's ownership registry — only one
+ * factory is ever live — so every remaining entry belongs to the factory being disposed. A leaving
+ * call's own PCs/tracks were already released by its leave() before this runs.
+ *
+ * Runs on the module's serial worker queue (methodQueue), so the reused peerConnectionClose/
+ * peerConnectionDispose/mediaStreamTrackRelease calls execute synchronously on the same thread.
+ */
+- (BOOL)disposeCurrentFactoryOrdered {
+    if (![self.factoryRegistry releaseReference]) {
+        return NO;
+    }
+
+    // 1. Close + dispose the factory's PeerConnections first.
+    for (NSNumber *pcId in [self.peerConnections.allKeys copy]) {
+        @try {
+            [self peerConnectionClose:pcId];
+            [self peerConnectionDispose:pcId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing pc %@: %@", pcId, e.reason);
+        }
+    }
+
+    // 2. Stop capture + release owned local tracks (e.g. a camera capturer adopted from the lobby
+    // preview) so the AVCaptureSession is torn down before the factory's video sources are freed.
+    for (NSString *trackId in [self.localTracks.allKeys copy]) {
+        @try {
+            [self mediaStreamTrackRelease:trackId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing track %@: %@", trackId, e.reason);
+        }
+    }
+
+    // 3. Now it is safe to dispose the factory + its ADM.
+    return [self.factoryRegistry disposeCurrent];
 }
 
 - (NSArray<NSString *> *)supportedEvents {

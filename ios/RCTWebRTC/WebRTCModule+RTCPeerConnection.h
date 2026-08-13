@@ -16,4 +16,7 @@
 
 + (RTCCertificate *)getCertificate:(NSString *)certId;
 
+- (void)peerConnectionClose:(nonnull NSNumber *)objectID;
+- (void)peerConnectionDispose:(nonnull NSNumber *)objectID;
+
 @end
