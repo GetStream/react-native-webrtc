@@ -82,9 +82,7 @@
             RCTLogWarn(@"[VideoCaptureController] No Center Stage format for device %@, disabling Center Stage",
                        self.device);
             AVCaptureDevice.centerStageEnabled = NO;
-            format = [self selectFormatForDevice:self.device
-                                 withTargetWidth:self.width
-                                withTargetHeight:self.height];
+            format = [self selectFormatForDevice:self.device withTargetWidth:self.width withTargetHeight:self.height];
         }
     }
 
@@ -359,7 +357,6 @@
                 continue;
             }
         }
-
 
         CMVideoDimensions dimension = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
         FourCharCode pixelFormat = CMFormatDescriptionGetMediaSubType(format.formatDescription);
