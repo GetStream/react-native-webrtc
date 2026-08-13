@@ -263,6 +263,30 @@ RCT_EXPORT_METHOD(disposeCallFactory
         }
     }
 
+    // 2b. Release local streams. An RTCMediaStream strong-refs its tracks, and every track (and the
+    // video/audio source behind it) strong-refs the RTCPeerConnectionFactory — so a leftover stream
+    // transitively pins the factory even after the tracks are gone from localTracks. Drop the
+    // stream's track refs, then the stream itself, so nothing keeps the factory alive.
+    for (NSString *streamId in [self.localStreams.allKeys copy]) {
+        @try {
+            RTCMediaStream *stream = self.localStreams[streamId];
+            for (RTCAudioTrack *t in [stream.audioTracks copy]) {
+                [stream removeAudioTrack:t];
+            }
+            for (RTCVideoTrack *t in [stream.videoTracks copy]) {
+                [stream removeVideoTrack:t];
+            }
+            [self mediaStreamRelease:streamId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing stream %@: %@", streamId, e.reason);
+        }
+    }
+
+    // 2c. Drop the video-effects processor. It is retained by the module via an OBJC_ASSOCIATION_RETAIN
+    // associated object and strong-refs the RTCVideoSource (background-blur pipeline), which strong-refs
+    // the factory. Nothing else clears it on leave, so it independently pins the factory across calls.
+    self.videoEffectProcessor = nil;
+
     // 3. Now it is safe to dispose the factory + its ADM.
     return [self.factoryRegistry disposeCurrent];
 }
