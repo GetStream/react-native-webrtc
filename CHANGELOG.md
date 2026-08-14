@@ -1,3 +1,9 @@
+## [145.3.1](https://github.com/GetStream/react-native-webrtc/compare/v145.3.0...v145.3.1) (2026-08-14)
+
+### Bug Fixes
+
+* reconfigure iOS audio after post-reset CallKit activation ([#60](https://github.com/GetStream/react-native-webrtc/issues/60)) ([22800b4](https://github.com/GetStream/react-native-webrtc/commit/22800b451d5814a089f4725ea2a26c624c031271))
+
 ## [145.3.0](https://github.com/GetStream/react-native-webrtc/compare/v145.2.0...v145.3.0) (2026-08-12)
 
 ### Features
