@@ -223,27 +223,17 @@ RCT_EXPORT_METHOD(disposeCallFactory
 }
 
 /**
- * Disposes the live factory in order — PeerConnections, then local tracks, then the factory + its
- * ADM — and returns whether a factory was disposed. An RTCPeerConnectionFactory must not be released
- * while PeerConnections or tracks created from it are still alive (use-after-free in libwebrtc), so
- * its dependents are torn down first. Shared by disposeCallFactory (leave) and createCallFactory
- * (replacing a stale bare-fork default at join), mirroring Android's disposeCurrentFactoryOrdered.
- *
- * Reference-counted: when the factory is shared across concurrent calls, only the LAST consumer's
- * release actually tears it down (releaseReference returns NO for earlier releases). On iOS the
- * module's own peerConnections / localTracks maps are the factory's ownership registry — only one
- * factory is ever live — so every remaining entry belongs to the factory being disposed. A leaving
- * call's own PCs/tracks were already released by its leave() before this runs.
- *
- * Runs on the module's serial worker queue (methodQueue), so the reused peerConnectionClose/
- * peerConnectionDispose/mediaStreamTrackRelease calls execute synchronously on the same thread.
+ * Disposes the live factory and its dependents in order: PeerConnections → local tracks → local
+ * streams → video-effects processor → factory + ADM. Everything is ARC-refcounted, so the factory
+ * is freed only when its LAST reference drops — every dependent that strong-refs it (PCs, tracks,
+ * streams, and the videoEffectProcessor associated object) must be released first or the factory
+ * leaks. No-op unless this is the last reference; returns whether it disposed the factory.
  */
 - (BOOL)disposeCurrentFactoryOrdered {
     if (![self.factoryRegistry releaseReference]) {
         return NO;
     }
 
-    // 1. Close + dispose the factory's PeerConnections first.
     for (NSNumber *pcId in [self.peerConnections.allKeys copy]) {
         @try {
             [self peerConnectionClose:pcId];
@@ -253,8 +243,6 @@ RCT_EXPORT_METHOD(disposeCallFactory
         }
     }
 
-    // 2. Stop capture + release owned local tracks (e.g. a camera capturer adopted from the lobby
-    // preview) so the AVCaptureSession is torn down before the factory's video sources are freed.
     for (NSString *trackId in [self.localTracks.allKeys copy]) {
         @try {
             [self mediaStreamTrackRelease:trackId];
@@ -263,10 +251,6 @@ RCT_EXPORT_METHOD(disposeCallFactory
         }
     }
 
-    // 2b. Release local streams. An RTCMediaStream strong-refs its tracks, and every track (and the
-    // video/audio source behind it) strong-refs the RTCPeerConnectionFactory — so a leftover stream
-    // transitively pins the factory even after the tracks are gone from localTracks. Drop the
-    // stream's track refs, then the stream itself, so nothing keeps the factory alive.
     for (NSString *streamId in [self.localStreams.allKeys copy]) {
         @try {
             RTCMediaStream *stream = self.localStreams[streamId];
@@ -282,12 +266,8 @@ RCT_EXPORT_METHOD(disposeCallFactory
         }
     }
 
-    // 2c. Drop the video-effects processor. It is retained by the module via an OBJC_ASSOCIATION_RETAIN
-    // associated object and strong-refs the RTCVideoSource (background-blur pipeline), which strong-refs
-    // the factory. Nothing else clears it on leave, so it independently pins the factory across calls.
     self.videoEffectProcessor = nil;
 
-    // 3. Now it is safe to dispose the factory + its ADM.
     return [self.factoryRegistry disposeCurrent];
 }
 
