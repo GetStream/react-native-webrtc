@@ -9,6 +9,7 @@
 
 #import "AudioDeviceModuleObserver.h"
 #import "RTCCameraPreviewViewManager.h"
+#import "WebRTCModule+RTCMediaStream.h"
 #import "WebRTCModule+RTCPeerConnection.h"
 #import "WebRTCModule.h"
 #import "WebRTCModuleOptions.h"
@@ -199,6 +200,14 @@ RCT_EXPORT_METHOD(createCallFactory
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
     BOOL bypassVoiceProcessing = [options[@"bypassVoiceProcessing"] boolValue];
+
+    // This makes default factory being disposed in a proper sequence.
+    if ([self.factoryRegistry isBareForkDefaultLive]) {
+        RCTLogInfo(@"createCallFactory(): tearing down stale bare-fork default (ordered) before "
+                    "creating the call factory");
+        [self disposeCurrentFactoryOrdered];
+    }
+
     PeerConnectionFactoryProvider *factory = [self.factoryRegistry create:bypassVoiceProcessing];
     if (factory == nil) {
         reject(@"E_FACTORY_CREATE", @"Failed to create call factory: registry is disposed", nil);
@@ -210,7 +219,56 @@ RCT_EXPORT_METHOD(createCallFactory
 RCT_EXPORT_METHOD(disposeCallFactory
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    resolve(@([self.factoryRegistry disposeCurrent]));
+    resolve(@([self disposeCurrentFactoryOrdered]));
+}
+
+/**
+ * Disposes the live factory and its dependents in order: PeerConnections → local tracks → local
+ * streams → video-effects processor → factory + ADM. Everything is ARC-refcounted, so the factory
+ * is freed only when its LAST reference drops — every dependent that strong-refs it (PCs, tracks,
+ * streams, and the videoEffectProcessor associated object) must be released first or the factory
+ * leaks. No-op unless this is the last reference; returns whether it disposed the factory.
+ */
+- (BOOL)disposeCurrentFactoryOrdered {
+    if (![self.factoryRegistry releaseReference]) {
+        return NO;
+    }
+
+    for (NSNumber *pcId in [self.peerConnections.allKeys copy]) {
+        @try {
+            [self peerConnectionClose:pcId];
+            [self peerConnectionDispose:pcId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing pc %@: %@", pcId, e.reason);
+        }
+    }
+
+    for (NSString *trackId in [self.localTracks.allKeys copy]) {
+        @try {
+            [self mediaStreamTrackRelease:trackId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing track %@: %@", trackId, e.reason);
+        }
+    }
+
+    for (NSString *streamId in [self.localStreams.allKeys copy]) {
+        @try {
+            RTCMediaStream *stream = self.localStreams[streamId];
+            for (RTCAudioTrack *t in [stream.audioTracks copy]) {
+                [stream removeAudioTrack:t];
+            }
+            for (RTCVideoTrack *t in [stream.videoTracks copy]) {
+                [stream removeVideoTrack:t];
+            }
+            [self mediaStreamRelease:streamId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing stream %@: %@", streamId, e.reason);
+        }
+    }
+
+    self.videoEffectProcessor = nil;
+
+    return [self.factoryRegistry disposeCurrent];
 }
 
 - (NSArray<NSString *> *)supportedEvents {

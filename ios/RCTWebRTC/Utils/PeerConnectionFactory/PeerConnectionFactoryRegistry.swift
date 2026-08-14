@@ -65,6 +65,16 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
         return currentFactory
     }
 
+    /// True when the live factory is the lazily-built bare-fork default (no per-call factory has
+    /// taken its place). Lets the module tear a stale default down in order before building the
+    /// call factory, matching the Android registry.
+    @objc public func isBareForkDefaultLive() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let currentFactory = currentFactory, !currentFactory.isDisposed() else { return false }
+        return currentIsBareForkDefault
+    }
+
     @objc public func create(_ bypassVoiceProcessing: Bool) -> PeerConnectionFactoryProvider? {
         lock.lock()
         defer { lock.unlock() }
@@ -108,20 +118,33 @@ public typealias PeerConnectionFactoryBuilder = (_ factoryId: String, _ bypassVo
         return factory
     }
 
-    /// Releases one consumer's reference to the live call factory. Actually disposes only when 
-    /// the LAST reference is released; when other concurrent-call consumers still
-    /// hold it, it decrements and keeps the factory alive. Also false when nothing is live.
+    /// Releases one consumer's reference to the live call factory. Returns true only when the LAST
+    /// reference is released; when other concurrent-call consumers still hold it, it decrements and
+    /// keeps the factory alive. Also false when nothing is live.
+    @objc public func releaseReference() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let factory = currentFactory else {
+            return false
+        }
+        if currentRefCount > 1 {
+            currentRefCount -= 1
+            NSLog("[PCFactoryRegistry] releaseReference(): factory %@ still shared; kept (refCount=%d)",
+                  factory.factoryId, currentRefCount)
+            return false
+        }
+        currentRefCount = 0
+        return true
+    }
+
+    /// Disposes the live factory + its ADM unconditionally and returns whether one was disposed.
+    /// Reference counting is handled by `releaseReference()`, which must be called first on the
+    /// leave / dispose path; this only performs the final teardown once the last reference is gone.
     @objc public func disposeCurrent() -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard let factory = currentFactory else {
             NSLog("[PCFactoryRegistry] disposeCurrent(): no live factory (already disposed?)")
-            return false
-        }
-        if currentRefCount > 1 {
-            currentRefCount -= 1
-            NSLog("[PCFactoryRegistry] disposeCurrent(): factory %@ still shared; kept (refCount=%d)",
-                  factory.factoryId, currentRefCount)
             return false
         }
         let wasDefault = currentIsBareForkDefault

@@ -156,23 +156,30 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     /**
-     * Disposes the live factory in order — PeerConnections, then tracks, then the factory + its ADM —
-     * and returns whether a factory was disposed. A libwebrtc {@code PeerConnectionFactory} must not
-     * be disposed while PCs or tracks from it are still alive (use-after-free), so its dependents go
-     * first. Shared by {@link #disposeCallFactory} (leave) and {@link #createCallFactory} (replacing a
-     * stale bare-fork default at join).
-     *
-     * <p>Reference-counted: when the factory is shared by concurrent calls, only the LAST consumer's
-     * release actually tears it down. Earlier releases keep the factory (and its PCs/tracks) intact
-     * for the remaining call(s) — the leaving call's own PCs were already disposed by its {@code
-     * leave}, so its ids are gone from the owned sets before this runs.
+     * Disposes the live factory and its dependents in order: streams → PeerConnections → owned tracks
+     * → factory + ADM. Dependents go before the factory (disposing a libwebrtc factory with live
+     * PCs/tracks is a use-after-free); streams go first so {@code removeTrack()} runs while their
+     * tracks are still alive. Also clears {@code localStreams}, otherwise only released in
+     * {@link #invalidate()} (else it leaks across join/leave). No-op unless this is the last
+     * reference; returns whether it disposed the factory.
      */
     private boolean disposeCurrentFactoryOrdered() {
         if (!factoryRegistry.releaseReference()) {
             return false;
         }
 
-        // 1. Dispose the factory's PeerConnections first.
+        for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+            try {
+                MediaStream stream = entry.getValue();
+                for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                stream.dispose();
+            } catch (Exception e) {
+                Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing stream " + entry.getKey(), e);
+            }
+        }
+        localStreams.clear();
+
         for (int pcId : factoryRegistry.currentOwnedPcIds()) {
             try {
                 PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
@@ -186,8 +193,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
         }
 
-        // 2. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
-        // preview) so the camera2 session is fully closed before the VideoSources are freed.
         for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
             try {
                 getUserMediaImpl.disposeTrack(trackId);
@@ -196,7 +201,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
         }
 
-        // 3. Now it is safe to dispose the factory + its ADM.
         return factoryRegistry.disposeCurrent();
     }
 

@@ -14,4 +14,7 @@
 - (void)removeLocalVideoTrackDimensionDetection:(RTCVideoTrack *)videoTrack;
 
 - (RTCMediaStreamTrack *)trackForId:(nonnull NSString *)trackId pcId:(nonnull NSNumber *)pcId;
+
+- (void)mediaStreamTrackRelease:(nonnull NSString *)trackID;
+- (void)mediaStreamRelease:(nonnull NSString *)streamID;
 @end
