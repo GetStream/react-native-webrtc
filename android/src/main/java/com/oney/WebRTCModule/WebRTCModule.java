@@ -186,7 +186,23 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
         }
 
-        // 2. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
+        // 2. Release local streams BEFORE their tracks (mirrors invalidate()): detach each track
+        // while it is still valid, then dispose the stream. Doing this after track disposal would
+        // touch already-freed native tracks. localStreams is otherwise only cleared in invalidate(),
+        // so leftover MediaStream / VideoTrack objects accumulate across join/leave cycles.
+        for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+            try {
+                MediaStream stream = entry.getValue();
+                for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                stream.dispose();
+            } catch (Exception e) {
+                Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing stream " + entry.getKey(), e);
+            }
+        }
+        localStreams.clear();
+
+        // 3. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
         // preview) so the camera2 session is fully closed before the VideoSources are freed.
         for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
             try {
@@ -196,7 +212,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
         }
 
-        // 3. Now it is safe to dispose the factory + its ADM.
+        // 4. Now it is safe to dispose the factory + its ADM.
         return factoryRegistry.disposeCurrent();
     }
 
