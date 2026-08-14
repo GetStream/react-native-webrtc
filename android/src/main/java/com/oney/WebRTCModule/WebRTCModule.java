@@ -172,7 +172,23 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             return false;
         }
 
-        // 1. Dispose the factory's PeerConnections first.
+        // 1. Detach + dispose local streams first, before PCs and owned tracks. A stream may hold a
+        // remote track (owned by a PC) or a local track, so removeTrack() must run while those tracks
+        // are still alive — before their owner is disposed. localStreams is otherwise only cleared in
+        // invalidate(), so leftover MediaStream/VideoTrack objects leak across join/leave cycles.
+        for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+            try {
+                MediaStream stream = entry.getValue();
+                for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                stream.dispose();
+            } catch (Exception e) {
+                Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing stream " + entry.getKey(), e);
+            }
+        }
+        localStreams.clear();
+
+        // 2. Dispose the factory's PeerConnections (they own the remote tracks detached above).
         for (int pcId : factoryRegistry.currentOwnedPcIds()) {
             try {
                 PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
@@ -185,22 +201,6 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing pc " + pcId, e);
             }
         }
-
-        // 2. Release local streams BEFORE their tracks (mirrors invalidate()): detach each track
-        // while it is still valid, then dispose the stream. Doing this after track disposal would
-        // touch already-freed native tracks. localStreams is otherwise only cleared in invalidate(),
-        // so leftover MediaStream / VideoTrack objects accumulate across join/leave cycles.
-        for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
-            try {
-                MediaStream stream = entry.getValue();
-                for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
-                for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
-                stream.dispose();
-            } catch (Exception e) {
-                Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing stream " + entry.getKey(), e);
-            }
-        }
-        localStreams.clear();
 
         // 3. Stop + dispose owned tracks (e.g. a camera capturer adopted from the lobby
         // preview) so the camera2 session is fully closed before the VideoSources are freed.
