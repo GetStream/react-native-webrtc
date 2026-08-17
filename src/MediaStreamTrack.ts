@@ -248,10 +248,19 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
             return;
         }
 
-        const normalized = normalizeConstraints({ video: constraints ?? true });
+        // Work on a copy: `constraints` belongs to the caller, who may have frozen it, and
+        // _constraints must not alias an object the caller can mutate after we return.
+        const effective: MediaTrackConstraints = { ...constraints };
+
+        // Preserve current facing mode when user doesn't specify one
+        if (constraints && !effective.facingMode && this._settings?.facingMode) {
+            effective.facingMode = this._settings.facingMode;
+        }
+
+        const normalized = normalizeConstraints({ video: constraints ? effective : true });
 
         this._settings = await WebRTCModule.mediaStreamTrackApplyConstraints(this.id, normalized.video);
-        this._constraints = constraints ?? {};
+        this._constraints = effective;
     }
 
     clone(): MediaStreamTrack {
