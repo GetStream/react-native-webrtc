@@ -65,7 +65,7 @@ Sanity check after any dependency edit: `grep -r "org.webrtc:google-webrtc\|webr
 
 ## Keeping the fork in sync with upstream
 
-Pulling fixes/features from upstream `react-native-webrtc` (and sibling forks) is a recurring, error-prone task with strict preservation rules. **Read `.claude/skills/upstream-sync.md` before doing any sync/cherry-pick/merge work** — it documents the triage table, the `sync-marker/<remote>` refs that record how far each upstream has been reviewed (and why upstream refs must never be merged into `master`), and the files that must never change during a sync.
+Pulling fixes/features from upstream `react-native-webrtc` (and sibling forks) is a recurring, error-prone task with strict preservation rules. **Read `.claude/skills/upstream-sync.md` before doing any sync/cherry-pick/merge work** — it documents the triage table, the `sync-marker/<remote>` refs that record how far each upstream has been reviewed (and the strict tag-absorption conditions under which an upstream ref may ever be merged into `master`), and the files that must never change during a sync.
 
 ## Releases
 
