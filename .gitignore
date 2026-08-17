@@ -10,6 +10,7 @@ android/build
 Podfile.lock
 WebRTC.xcframework
 WebRTC.dSYMs
+third_party/.webrtc-version
 examples/GumTestApp/package-lock.json
 examples/GumTestApp_macOS/package-lock.json
 **/.xcode.env.local
