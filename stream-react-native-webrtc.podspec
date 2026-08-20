@@ -9,7 +9,7 @@ package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 # `StreamWebRTC` podspec in that repo points at. CocoaPods skips `prepare_command` for
 # `:path` pods (which is how React Native autolinks this module), so the fetch happens
 # here — the podspec is plain Ruby, evaluated on every `pod install`.
-webrtc_version   = '146.16.0'
+webrtc_version   = '145.16.0'
 webrtc_url       = "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/#{webrtc_version}/WebRTC.xcframework.zip"
 webrtc_dir       = File.join(__dir__, 'third_party')
 webrtc_framework = File.join(webrtc_dir, 'WebRTC.xcframework')
