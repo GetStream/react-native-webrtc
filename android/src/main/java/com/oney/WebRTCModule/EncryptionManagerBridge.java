@@ -68,7 +68,7 @@ class EncryptionManagerBridge {
 
     WritableMap dispose(ReadableMap options) {
         String handle = getString(options, "handle");
-        EncryptionManager manager = handle != null ? managers.remove(handle) : null;
+        EncryptionManager manager = handle != null ? managers.get(handle) : null;
         if (manager == null) {
             // Disposing twice, or after a reload, is not an error.
             return Arguments.createMap();
@@ -77,10 +77,14 @@ class EncryptionManagerBridge {
         try {
             manager.setObserver(null);
             manager.dispose();
-            return Arguments.createMap();
         } catch (RuntimeException e) {
+            // Deregistered only once the native cleanup succeeds, so a failed manager stays
+            // reachable for a later dispose() or for disposeAll() on teardown.
             return error(e);
         }
+
+        managers.remove(handle);
+        return Arguments.createMap();
     }
 
     /**
