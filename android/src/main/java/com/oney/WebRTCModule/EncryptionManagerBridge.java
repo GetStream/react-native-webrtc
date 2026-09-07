@@ -107,10 +107,10 @@ class EncryptionManagerBridge {
         }
 
         String userId = getString(options, "userId");
-        Integer keyIndex = getInt(options, "keyIndex");
+        Integer keyIndex = getKeyIndex(options);
         byte[] key = getKey(options);
         if (userId == null || userId.isEmpty() || keyIndex == null || key == null) {
-            return error("encryptionManagerSetKey() requires userId, keyIndex and key");
+            return error("encryptionManagerSetKey() requires userId, a keyIndex in 0-255 and key");
         }
 
         try {
@@ -127,10 +127,10 @@ class EncryptionManagerBridge {
             return error("encryptionManagerSetSharedKey(): manager not found");
         }
 
-        Integer keyIndex = getInt(options, "keyIndex");
+        Integer keyIndex = getKeyIndex(options);
         byte[] key = getKey(options);
         if (keyIndex == null || key == null) {
-            return error("encryptionManagerSetSharedKey() requires keyIndex and key");
+            return error("encryptionManagerSetSharedKey() requires a keyIndex in 0-255 and key");
         }
 
         try {
@@ -148,9 +148,9 @@ class EncryptionManagerBridge {
         }
 
         String userId = getString(options, "userId");
-        Integer keyIndex = getInt(options, "keyIndex");
+        Integer keyIndex = getKeyIndex(options);
         if (userId == null || userId.isEmpty() || keyIndex == null) {
-            return error("encryptionManagerRemoveKey() requires userId and keyIndex");
+            return error("encryptionManagerRemoveKey() requires userId and a keyIndex in 0-255");
         }
 
         try {
@@ -186,9 +186,9 @@ class EncryptionManagerBridge {
             return error("encryptionManagerRemoveSharedKey(): manager not found");
         }
 
-        Integer keyIndex = getInt(options, "keyIndex");
+        Integer keyIndex = getKeyIndex(options);
         if (keyIndex == null) {
-            return error("encryptionManagerRemoveSharedKey() requires keyIndex");
+            return error("encryptionManagerRemoveSharedKey() requires a keyIndex in 0-255");
         }
 
         try {
@@ -409,6 +409,26 @@ class EncryptionManagerBridge {
         }
 
         return options.getString(key);
+    }
+
+    /**
+     * A key index is validated before it is narrowed: {@link ReadableMap#getInt} truncates, so a
+     * fractional or non-finite index would otherwise land silently on a valid slot instead of being
+     * rejected -- {@code removeSharedKey(-0.5)} would delete slot 0.
+     */
+    @Nullable
+    private static Integer getKeyIndex(ReadableMap options) {
+        if (!options.hasKey("keyIndex") || options.getType("keyIndex") != ReadableType.Number) {
+            return null;
+        }
+
+        // NaN fails the first comparison; the range check covers both infinities.
+        double keyIndex = options.getDouble("keyIndex");
+        if (keyIndex != Math.floor(keyIndex) || keyIndex < 0 || keyIndex > 255) {
+            return null;
+        }
+
+        return (int) keyIndex;
     }
 
     @Nullable

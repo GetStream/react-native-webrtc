@@ -69,6 +69,27 @@ static BOOL RTCEncryptionTrackTypeFromOptions(NSDictionary *options, NSNumber **
     return YES;
 }
 
+/*
+ * A key index is validated before it is narrowed: `intValue` truncates, so a fractional or non-finite
+ * index would otherwise land silently on a valid slot instead of being rejected -- a `keyIndex` of
+ * -0.5 would remove slot 0.
+ */
+static BOOL RTCEncryptionKeyIndexFromOptions(NSDictionary *options, int *keyIndex) {
+    NSNumber *value = RTCEncryptionOptionalValue(options, @"keyIndex", [NSNumber class]);
+    if (value == nil) {
+        return NO;
+    }
+
+    /* NaN fails the first comparison; the range check covers both infinities. */
+    double index = value.doubleValue;
+    if (index != trunc(index) || index < 0 || index > 255) {
+        return NO;
+    }
+
+    *keyIndex = (int)index;
+    return YES;
+}
+
 - (nullable NSData *)encryptionKeyFromOptions:(NSDictionary *)options {
     NSString *key = RTCEncryptionOptionalValue(options, @"key", [NSString class]);
     if (key == nil) {
@@ -161,15 +182,16 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(encryptionManagerSetKey : (nonnull NSDict
         }
 
         NSString *userId = RTCEncryptionOptionalValue(options, @"userId", [NSString class]);
-        NSNumber *keyIndex = RTCEncryptionOptionalValue(options, @"keyIndex", [NSNumber class]);
+        int keyIndex = 0;
+        BOOL hasKeyIndex = RTCEncryptionKeyIndexFromOptions(options, &keyIndex);
         NSData *key = [self encryptionKeyFromOptions:options];
-        if (userId.length == 0 || keyIndex == nil || key == nil) {
-            result = @{@"error" : @"encryptionManagerSetKey() requires userId, keyIndex and key"};
+        if (userId.length == 0 || !hasKeyIndex || key == nil) {
+            result = @{@"error" : @"encryptionManagerSetKey() requires userId, a keyIndex in 0-255 and key"};
             return;
         }
 
         NSError *error = nil;
-        if (![manager setKey:userId keyIndex:keyIndex.intValue rawKey:key error:&error]) {
+        if (![manager setKey:userId keyIndex:keyIndex rawKey:key error:&error]) {
             result = RTCEncryptionErrorResult(error, @"setKey failed");
         }
     });
@@ -187,15 +209,16 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(encryptionManagerSetSharedKey : (nonnull 
             return;
         }
 
-        NSNumber *keyIndex = RTCEncryptionOptionalValue(options, @"keyIndex", [NSNumber class]);
+        int keyIndex = 0;
+        BOOL hasKeyIndex = RTCEncryptionKeyIndexFromOptions(options, &keyIndex);
         NSData *key = [self encryptionKeyFromOptions:options];
-        if (keyIndex == nil || key == nil) {
-            result = @{@"error" : @"encryptionManagerSetSharedKey() requires keyIndex and key"};
+        if (!hasKeyIndex || key == nil) {
+            result = @{@"error" : @"encryptionManagerSetSharedKey() requires a keyIndex in 0-255 and key"};
             return;
         }
 
         NSError *error = nil;
-        if (![manager setSharedKey:keyIndex.intValue rawKey:key error:&error]) {
+        if (![manager setSharedKey:keyIndex rawKey:key error:&error]) {
             result = RTCEncryptionErrorResult(error, @"setSharedKey failed");
         }
     });
@@ -214,14 +237,15 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(encryptionManagerRemoveKey : (nonnull NSD
         }
 
         NSString *userId = RTCEncryptionOptionalValue(options, @"userId", [NSString class]);
-        NSNumber *keyIndex = RTCEncryptionOptionalValue(options, @"keyIndex", [NSNumber class]);
-        if (userId.length == 0 || keyIndex == nil) {
-            result = @{@"error" : @"encryptionManagerRemoveKey() requires userId and keyIndex"};
+        int keyIndex = 0;
+        BOOL hasKeyIndex = RTCEncryptionKeyIndexFromOptions(options, &keyIndex);
+        if (userId.length == 0 || !hasKeyIndex) {
+            result = @{@"error" : @"encryptionManagerRemoveKey() requires userId and a keyIndex in 0-255"};
             return;
         }
 
         NSError *error = nil;
-        if (![manager removeKey:userId keyIndex:keyIndex.intValue error:&error]) {
+        if (![manager removeKey:userId keyIndex:keyIndex error:&error]) {
             result = RTCEncryptionErrorResult(error, @"removeKey failed");
         }
     });
@@ -264,14 +288,15 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(encryptionManagerRemoveSharedKey : (nonnu
             return;
         }
 
-        NSNumber *keyIndex = RTCEncryptionOptionalValue(options, @"keyIndex", [NSNumber class]);
-        if (keyIndex == nil) {
-            result = @{@"error" : @"encryptionManagerRemoveSharedKey() requires keyIndex"};
+        int keyIndex = 0;
+        BOOL hasKeyIndex = RTCEncryptionKeyIndexFromOptions(options, &keyIndex);
+        if (!hasKeyIndex) {
+            result = @{@"error" : @"encryptionManagerRemoveSharedKey() requires a keyIndex in 0-255"};
             return;
         }
 
         NSError *error = nil;
-        if (![manager removeSharedKey:keyIndex.intValue error:&error]) {
+        if (![manager removeSharedKey:keyIndex error:&error]) {
             result = RTCEncryptionErrorResult(error, @"removeSharedKey failed");
         }
     });
