@@ -398,12 +398,17 @@ class EncryptionManagerBridge {
             return null;
         }
 
-        Integer trackType = getInt(options, "trackType");
-        if (trackType == null || trackType < 0 || trackType >= EncryptionManager.TrackType.values().length) {
+        // Validated before it is narrowed, like the key index: getInt truncates, so a fractional value
+        // would land on a valid enum entry instead of being rejected -- 1.5 would become VIDEO.
+        // NaN fails the first comparison; the range check covers both infinities.
+        double trackType =
+                options.getType("trackType") == ReadableType.Number ? options.getDouble("trackType") : Double.NaN;
+        if (trackType != Math.floor(trackType) || trackType < 0
+                || trackType >= EncryptionManager.TrackType.values().length) {
             throw new IllegalArgumentException("got an unusable trackType");
         }
 
-        return EncryptionManager.TrackType.values()[trackType];
+        return EncryptionManager.TrackType.values()[(int) trackType];
     }
 
     @Nullable

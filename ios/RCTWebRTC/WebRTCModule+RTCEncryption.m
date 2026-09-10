@@ -60,12 +60,19 @@ static BOOL RTCEncryptionTrackTypeFromOptions(NSDictionary *options, NSNumber **
         return YES;
     }
 
-    if (![value isKindOfClass:[NSNumber class]] || [value integerValue] < RTCEncryptionTrackTypeAudio ||
-        [value integerValue] > RTCEncryptionTrackTypeScreenshareAudio) {
+    if (![value isKindOfClass:[NSNumber class]]) {
         return NO;
     }
 
-    *trackType = value;
+    /* Validated before it is narrowed, like the key index: `integerValue` truncates, so a fractional
+     * value would land on a valid enum entry instead of being rejected -- 1.5 would become video.
+     * NaN fails the first comparison; the range check covers both infinities. */
+    double type = [(NSNumber *)value doubleValue];
+    if (type != trunc(type) || type < RTCEncryptionTrackTypeAudio || type > RTCEncryptionTrackTypeScreenshareAudio) {
+        return NO;
+    }
+
+    *trackType = @((NSInteger)type);
     return YES;
 }
 
