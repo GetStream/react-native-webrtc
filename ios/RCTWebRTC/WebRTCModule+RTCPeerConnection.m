@@ -95,6 +95,40 @@ static NSMutableDictionary<NSString *, RTCCertificate *> *gCertificates = nil;
 
 int _transceiverNextId = 0;
 
+- (nullable RTCRtpSender *)getSenderByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                             senderId:(nonnull NSString *)senderId {
+    RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
+    if (!peerConnection) {
+        RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
+        return nil;
+    }
+
+    for (RTCRtpSender *s in peerConnection.senders) {
+        if ([senderId isEqual:s.senderId]) {
+            return s;
+        }
+    }
+
+    return nil;
+}
+
+- (nullable RTCRtpReceiver *)getReceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                               receiverId:(nonnull NSString *)receiverId {
+    RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
+    if (!peerConnection) {
+        RCTLogWarn(@"PeerConnection %@ not found", peerConnectionId);
+        return nil;
+    }
+
+    for (RTCRtpReceiver *r in peerConnection.receivers) {
+        if ([receiverId isEqual:r.receiverId]) {
+            return r;
+        }
+    }
+
+    return nil;
+}
+
 /*
  * This method is synchronous and blocking. This is done so we can implement createDataChannel
  * in the same way (synchronous) since the peer connection needs to exist before.

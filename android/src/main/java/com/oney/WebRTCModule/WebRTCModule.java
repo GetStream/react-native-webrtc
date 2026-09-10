@@ -59,6 +59,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     private final GetUserMediaImpl getUserMediaImpl;
 
+    private final EncryptionManagerBridge encryptionManagerBridge = new EncryptionManagerBridge(this);
+
     @Nullable
     private RTCCameraPreviewView activeCameraPreview;
 
@@ -211,6 +213,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         try {
             ThreadUtils
                     .submitToExecutor(() -> {
+                        // 0. Dispose E2EE managers: their frame transforms are held by the senders and
+                        // receivers of the PeerConnections disposed next.
+                        encryptionManagerBridge.disposeAll();
+
                         // 1. Dispose PeerConnections (dispose() calls close() internally)
                         for (int i = 0; i < mPeerConnectionObservers.size(); i++) {
                             try {
@@ -1698,6 +1704,97 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             }
 
             pco.dataChannelSend(reactTag, data, type);
+        });
+    }
+
+    /**
+     * The E2EE key and attach operations below are blocking-synchronous on purpose. An async attach
+     * would leave a window where a sender exists before its transform is installed, which is a
+     * plaintext window. Only the observational calls use promises.
+     */
+    private WritableMap submitEncryptionCall(Callable<WritableMap> callable) {
+        try {
+            return ThreadUtils.submitToExecutor(callable).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public boolean encryptionManagerIsSupported() {
+        return encryptionManagerBridge.isSupported();
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerCreate(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.create(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerDispose(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.dispose(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerSetKey(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.setKey(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerSetSharedKey(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.setSharedKey(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerRemoveKey(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.removeKey(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerRemoveAllKeys(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.removeAllKeys(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerRemoveSharedKey(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.removeSharedKey(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerEncrypt(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.encrypt(options));
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public WritableMap encryptionManagerDecrypt(ReadableMap options) {
+        return submitEncryptionCall(() -> encryptionManagerBridge.decrypt(options));
+    }
+
+    @ReactMethod
+    public void encryptionManagerEnablePerformanceReporting(String handle, boolean enabled, Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            try {
+                encryptionManagerBridge.enablePerformanceReporting(handle, enabled);
+                promise.resolve(null);
+            } catch (RuntimeException e) {
+                promise.reject("encryptionManagerEnablePerformanceReportingFailed", e.getMessage(), e);
+            }
+        });
+    }
+
+    @ReactMethod
+    public void encryptionManagerRequestKeyState(String handle, Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            try {
+                encryptionManagerBridge.requestKeyState(handle);
+                promise.resolve(null);
+            } catch (RuntimeException e) {
+                promise.reject("encryptionManagerRequestKeyStateFailed", e.getMessage(), e);
+            }
         });
     }
 

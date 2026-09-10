@@ -23,6 +23,20 @@ import permissions from './Permissions';
 import RTCAudioSession from './RTCAudioSession';
 import RTCCameraPreviewView from './RTCCameraPreviewView';
 import RTCCertificate from './RTCCertificate';
+import RTCEncryptionManager, {
+    RTCEncryptionAlgorithm,
+    type RTCEncryptionManagerOptions,
+} from './RTCEncryptionManager';
+import {
+    encryptionManagerEvents,
+    type RTCEncryptionEventData,
+    type RTCEncryptionEventType,
+    type RTCEncryptionKeyState,
+    type RTCEncryptionSharedKey,
+    RTCEncryptionTrackType,
+    type RTCEncryptionTrackPerf,
+    type RTCEncryptionUserKey,
+} from './RTCEncryptionManagerEvents';
 import RTCErrorEvent from './RTCErrorEvent';
 import RTCIceCandidate from './RTCIceCandidate';
 import RTCPeerConnection from './RTCPeerConnection';
@@ -42,6 +56,9 @@ setupNativeEvents();
 
 // Ensure audioDeviceModuleEvents is initialized and event listeners are registered
 audioDeviceModuleEvents.setupListeners();
+
+// Ensure encryptionManagerEvents is initialized and event listeners are registered
+encryptionManagerEvents.setupListeners();
 
 export {
     RTCIceCandidate,
@@ -71,6 +88,17 @@ export {
     AudioDeviceModule,
     AudioEngineMuteMode,
     audioDeviceModuleEvents,
+    RTCEncryptionManager,
+    RTCEncryptionAlgorithm,
+    RTCEncryptionTrackType,
+    encryptionManagerEvents,
+    type RTCEncryptionManagerOptions,
+    type RTCEncryptionEventData,
+    type RTCEncryptionEventType,
+    type RTCEncryptionKeyState,
+    type RTCEncryptionUserKey,
+    type RTCEncryptionSharedKey,
+    type RTCEncryptionTrackPerf,
 };
 
 declare const global: any;
@@ -103,4 +131,7 @@ function registerGlobals(): void {
 
     // Ensure audioDeviceModuleEvents is initialized and event listeners are registered
     audioDeviceModuleEvents.setupListeners();
+
+    // Ensure encryptionManagerEvents is initialized and event listeners are registered
+    encryptionManagerEvents.setupListeners();
 }
