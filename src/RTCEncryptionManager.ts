@@ -161,14 +161,14 @@ export default class RTCEncryptionManager {
             return;
         }
 
-        try {
-            this._invoke('encryptionManagerDispose', {});
-        } finally {
-            this._disposed = true;
-            this._subscription?.remove();
-            this._subscription = null;
-            this._listeners.clear();
-        }
+        // Marked disposed only once the native cleanup succeeds: the native side keeps a manager
+        // registered when its cleanup throws, so a failed dispose() has to stay retryable here too.
+        this._invoke('encryptionManagerDispose', {});
+
+        this._disposed = true;
+        this._subscription?.remove();
+        this._subscription = null;
+        this._listeners.clear();
     }
 
     _assertNotDisposed(): void {
