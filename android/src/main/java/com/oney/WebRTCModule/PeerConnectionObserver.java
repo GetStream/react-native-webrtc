@@ -66,12 +66,25 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     }
 
     void close() {
-        Log.d(TAG, "PeerConnection.close() for " + id);
+        final PeerConnection pc = peerConnection;
+        if (pc == null) {
+            Log.d(TAG, "PeerConnection.close() for " + id + " ignored; already disposed");
+            return;
+        }
 
-        peerConnection.close();
+        Log.d(TAG, "PeerConnection.close() for " + id);
+        pc.close();
     }
 
     void dispose() {
+        final PeerConnection pc = peerConnection;
+        peerConnection = null;
+
+        if (pc == null) {
+            Log.d(TAG, "PeerConnection.dispose() for " + id + " ignored; already disposed");
+            return;
+        }
+
         Log.d(TAG, "PeerConnection.dispose() for " + id);
 
         // Remove track adapters for remote tracks
@@ -85,7 +98,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         }
 
         // Remove video track adapters for local tracks (from senders)
-        for (RtpSender sender : this.peerConnection.getSenders()) {
+        for (RtpSender sender : pc.getSenders()) {
             MediaStreamTrack track = sender.track();
             if (track instanceof VideoTrack) {
                 videoTrackAdapters.removeAdapter((VideoTrack) track);
@@ -102,7 +115,7 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         // At this point there should be no local MediaStreams in the associated
         // PeerConnection. Call dispose() to free all remaining resources held
         // by the PeerConnection instance (RtpReceivers, RtpSenders, etc.)
-        peerConnection.dispose();
+        pc.dispose();
 
         videoTrackAdapters.dispose();
 
@@ -305,7 +318,13 @@ class PeerConnectionObserver implements PeerConnection.Observer {
 
             params.putMap("candidate", candidateParams);
 
-            SessionDescription newSdp = peerConnection.getLocalDescription();
+            final PeerConnection pc = peerConnection;
+            if (pc == null) {
+                Log.d(TAG, "onIceCandidate for " + id + " skipped; peer connection already disposed");
+                return;
+            }
+
+            SessionDescription newSdp = pc.getLocalDescription();
             WritableMap newSdpMap = Arguments.createMap();
 
             // Can happen when doing a rollback.
@@ -356,7 +375,13 @@ class PeerConnectionObserver implements PeerConnection.Observer {
             params.putString("iceGatheringState", iceGatheringStateString(iceGatheringState));
 
             if (iceGatheringState == PeerConnection.IceGatheringState.COMPLETE) {
-                SessionDescription newSdp = peerConnection.getLocalDescription();
+                final PeerConnection pc = peerConnection;
+                if (pc == null) {
+                    Log.d(TAG,
+                            "onIceGatheringChange for " + id + " skipped; peer connection already disposed");
+                    return;
+                }
+                SessionDescription newSdp = pc.getLocalDescription();
                 WritableMap newSdpMap = Arguments.createMap();
 
                 // Can happen when doing a rollback.
@@ -429,8 +454,14 @@ class PeerConnectionObserver implements PeerConnection.Observer {
         Log.d(TAG, "onAddTrack");
 
         ThreadUtils.runOnExecutor(() -> {
+            final PeerConnection pc = peerConnection;
+            if (pc == null) {
+                Log.d(TAG, "onAddTrack for " + id + " skipped; peer connection already disposed");
+                return;
+            }
+
             RtpTransceiver transceiver = null;
-            for (RtpTransceiver t : this.peerConnection.getTransceivers()) {
+            for (RtpTransceiver t : pc.getTransceivers()) {
                 if (Objects.equals(t.getReceiver().id(), receiver.id())) {
                     transceiver = t;
                     break;
@@ -502,6 +533,11 @@ class PeerConnectionObserver implements PeerConnection.Observer {
     @Override
     public void onRemoveTrack(RtpReceiver receiver) {
         ThreadUtils.runOnExecutor(() -> {
+            if (peerConnection == null) {
+                Log.d(TAG, "onRemoveTrack for " + id + " skipped; peer connection already disposed");
+                return;
+            }
+
             // Tear down track adapters so a subsequent onAddTrack with the
             // same trackId (SFU participant rejoin) creates a fresh adapter
             // on the new MediaStreamTrack object. Without this, the old sink
