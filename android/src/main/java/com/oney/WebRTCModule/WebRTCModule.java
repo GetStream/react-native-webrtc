@@ -27,6 +27,7 @@ import com.oney.WebRTCModule.webrtcutils.SelectiveVideoDecoderFactory;
 import org.webrtc.*;
 import org.webrtc.audio.AudioDeviceModule;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -54,6 +55,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     // Need to expose the peer connection codec factories here to get capabilities
     private final SparseArray<PeerConnectionObserver> mPeerConnectionObservers;
     final Map<String, MediaStream> localStreams;
+
+    // Accessed only on ThreadUtils' executor. Lifecycle requests wait for both teardown phases.
+    private final ArrayDeque<Runnable> pendingFactoryOperations = new ArrayDeque<>();
+    private boolean factoryDisposalPending;
 
     // Store generated certificates by ID to avoid exposing private keys to JS
     private static final Map<String, RtcCertificatePem> mCertificates = new HashMap<>();
@@ -129,7 +134,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void createCallFactory(ReadableMap options, Promise promise) {
-        ThreadUtils.runOnExecutor(() -> {
+        runFactoryOperation(() -> {
             try {
                 boolean bypassVoiceProcessing = options != null && options.hasKey("bypassVoiceProcessing")
                         && options.getBoolean("bypassVoiceProcessing");
@@ -165,7 +170,20 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void disposeCallFactory(Promise promise) {
-        ThreadUtils.runOnExecutor(() -> disposeCurrentFactoryOrdered(promise::resolve));
+        runFactoryOperation(() -> disposeCurrentFactoryOrdered(promise::resolve));
+    }
+
+    private void runFactoryOperation(Runnable operation) {
+        ThreadUtils.runOnExecutor(() -> {
+            pendingFactoryOperations.addLast(operation);
+            drainFactoryOperations();
+        });
+    }
+
+    private void drainFactoryOperations() {
+        while (!factoryDisposalPending && !pendingFactoryOperations.isEmpty()) {
+            pendingFactoryOperations.removeFirst().run();
+        }
     }
 
     /**
@@ -190,6 +208,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             return;
         }
 
+        factoryDisposalPending = true;
         for (int pcId : factoryRegistry.currentOwnedPcIds()) {
             try {
                 PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
@@ -202,41 +221,40 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         }
 
         ThreadUtils.runOnExecutor(() -> {
-            for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
-                try {
-                    MediaStream stream = entry.getValue();
-                    for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
-                    for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
-                    stream.dispose();
-                } catch (Exception e) {
-                    Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing stream " + entry.getKey(), e);
-                }
-            }
-            localStreams.clear();
-
-            for (int pcId : factoryRegistry.currentOwnedPcIds()) {
-                try {
-                    PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
-                    if (pco != null) {
-                        pco.dispose();
+            try {
+                for (Map.Entry<String, MediaStream> entry : localStreams.entrySet()) {
+                    try {
+                        MediaStream stream = entry.getValue();
+                        for (AudioTrack t : new ArrayList<>(stream.audioTracks)) stream.removeTrack(t);
+                        for (VideoTrack t : new ArrayList<>(stream.videoTracks)) stream.removeTrack(t);
+                        stream.dispose();
+                    } catch (Exception e) {
+                        Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing stream " + entry.getKey(), e);
                     }
-                } catch (Exception e) {
-                    Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing pc " + pcId, e);
-                } finally {
-                    mPeerConnectionObservers.remove(pcId);
-                    factoryRegistry.unbindPeerConnection(pcId);
                 }
-            }
+                localStreams.clear();
 
-            for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
-                try {
-                    getUserMediaImpl.disposeTrack(trackId);
-                } catch (Exception e) {
-                    Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing track " + trackId, e);
+                for (int pcId : factoryRegistry.currentOwnedPcIds()) {
+                    try {
+                        disposePeerConnection(pcId);
+                    } catch (Exception e) {
+                        Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing pc " + pcId, e);
+                    }
                 }
-            }
 
-            onDisposed.accept(factoryRegistry.disposeCurrent());
+                for (String trackId : factoryRegistry.currentOwnedTrackIds()) {
+                    try {
+                        getUserMediaImpl.disposeTrack(trackId);
+                    } catch (Exception e) {
+                        Log.w(TAG, "disposeCurrentFactoryOrdered(): error disposing track " + trackId, e);
+                    }
+                }
+
+                onDisposed.accept(factoryRegistry.disposeCurrent());
+            } finally {
+                factoryDisposalPending = false;
+                drainFactoryOperations();
+            }
         });
     }
 
@@ -348,6 +366,19 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     private PeerConnection getPeerConnection(int id) {
         PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
         return (pco == null) ? null : pco.getPeerConnection();
+    }
+
+    private void runWithPeerConnection(
+            PeerConnectionObserver pco, Promise promise, Consumer<PeerConnection> action) {
+        ThreadUtils.runOnExecutor(() -> {
+            PeerConnection pc = pco.getPeerConnection();
+            if (pc == null) {
+                Log.d(TAG, "PeerConnection disposed before callback ran");
+                promise.reject("E_PC_DISPOSED", "PeerConnection disposed");
+                return;
+            }
+            action.accept(pc);
+        });
     }
 
     void sendEvent(String eventName, @Nullable ReadableMap params) {
@@ -1294,14 +1325,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
                 @Override
                 public void onCreateSuccess(SessionDescription sdp) {
-                    ThreadUtils.runOnExecutor(() -> {
-                        final PeerConnection livePc = pco.getPeerConnection();
-                        if (livePc == null) {
-                            Log.d(TAG, "onCreateSuccess: pc " + id + " disposed before the callback ran");
-                            promise.reject("E_PC_DISPOSED", "PeerConnection disposed");
-                            return;
-                        }
-
+                    runWithPeerConnection(pco, promise, livePc -> {
                         WritableMap params = Arguments.createMap();
                         WritableMap sdpInfo = Arguments.createMap();
 
@@ -1312,7 +1336,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                         params.putMap("sdpInfo", sdpInfo);
 
                         WritableArray newTransceivers = Arguments.createArray();
-                        for (RtpTransceiver transceiver : peerConnection.getTransceivers()) {
+                        for (RtpTransceiver transceiver : livePc.getTransceivers()) {
                             if (!receiversIds.contains(transceiver.getReceiver().id())) {
                                 WritableMap newTransceiver = Arguments.createMap();
                                 newTransceiver.putInt("transceiverOrder", pco.getNextTransceiverId());
@@ -1359,14 +1383,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
                 @Override
                 public void onCreateSuccess(SessionDescription sdp) {
-                    ThreadUtils.runOnExecutor(() -> {
-                        final PeerConnection livePc = pco.getPeerConnection();
-                        if (livePc == null) {
-                            Log.d(TAG, "onCreateSuccess: pc " + id + " disposed before the callback ran");
-                            promise.reject("E_PC_DISPOSED", "PeerConnection disposed");
-                            return;
-                        }
-
+                    runWithPeerConnection(pco, promise, livePc -> {
                         WritableMap params = Arguments.createMap();
                         WritableMap sdpInfo = Arguments.createMap();
 
@@ -1408,14 +1425,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
                 @Override
                 public void onSetSuccess() {
-                    ThreadUtils.runOnExecutor(() -> {
-                        final PeerConnection livePc = pco.getPeerConnection();
-                        if (livePc == null) {
-                            Log.d(TAG, "peerConnectionSetLocalDescription() onSetSuccess: pc " + pcId
-                                            + " disposed before the callback ran");
-                            promise.reject("E_PC_DISPOSED", "PeerConnection disposed");
-                            return;
-                        }
+                    runWithPeerConnection(pco, promise, livePc -> {
                         WritableMap newSdpMap = Arguments.createMap();
                         WritableMap params = Arguments.createMap();
 
@@ -1480,14 +1490,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
                 @Override
                 public void onSetSuccess() {
-                    ThreadUtils.runOnExecutor(() -> {
-                        final PeerConnection livePc = pco.getPeerConnection();
-                        if (livePc == null) {
-                            Log.d(TAG, "peerConnectionSetRemoteDescription() onSetSuccess: pc " + id
-                                            + " disposed before the callback ran");
-                            promise.reject("E_PC_DISPOSED", "PeerConnection disposed");
-                            return;
-                        }
+                    runWithPeerConnection(pco, promise, livePc -> {
                         WritableMap newSdpMap = Arguments.createMap();
                         WritableMap params = Arguments.createMap();
 
@@ -1502,7 +1505,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                         params.putMap("sdpInfo", newSdpMap);
 
                         WritableArray newTransceivers = Arguments.createArray();
-                        for (RtpTransceiver transceiver : peerConnection.getTransceivers()) {
+                        for (RtpTransceiver transceiver : livePc.getTransceivers()) {
                             if (!receiversIds.contains(transceiver.getReceiver().id())) {
                                 WritableMap newTransceiver = Arguments.createMap();
                                 newTransceiver.putInt("transceiverOrder", pco.getNextTransceiverId());
@@ -1634,14 +1637,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             peerConnection.addIceCandidate(candidate, new AddIceObserver() {
                 @Override
                 public void onAddSuccess() {
-                    ThreadUtils.runOnExecutor(() -> {
-                        final PeerConnection livePc = pco.getPeerConnection();
-                        if (livePc == null) {
-                            Log.d(TAG, "peerConnectionAddICECandidate() onAddSuccess: pc " + pcId
-                                            + " disposed before the callback ran");
-                            promise.reject("E_PC_DISPOSED", "PeerConnection disposed");
-                            return;
-                        }
+                    runWithPeerConnection(pco, promise, livePc -> {
                         WritableMap newSdpMap = Arguments.createMap();
                         SessionDescription newSdp = livePc.getRemoteDescription();
                         newSdpMap.putString("type", newSdp.type.canonicalForm());
@@ -1685,19 +1681,21 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void peerConnectionDispose(int id) {
-        ThreadUtils.runOnExecutor(() -> {
-            PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
-            try {
-                if (pco == null) {
-                    Log.d(TAG, "peerConnectionDispose() peerConnection observer is null");
-                } else {
-                    pco.dispose();
-                }
-            } finally {
-                mPeerConnectionObservers.remove(id);
-                factoryRegistry.unbindPeerConnection(id);
+        ThreadUtils.runOnExecutor(() -> disposePeerConnection(id));
+    }
+
+    private void disposePeerConnection(int id) {
+        PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
+        try {
+            if (pco == null) {
+                Log.d(TAG, "peerConnectionDispose() peerConnection observer is null");
+            } else {
+                pco.dispose();
             }
-        });
+        } finally {
+            mPeerConnectionObservers.remove(id);
+            factoryRegistry.unbindPeerConnection(id);
+        }
     }
 
     @ReactMethod
