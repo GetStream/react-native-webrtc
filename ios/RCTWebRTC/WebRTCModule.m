@@ -28,6 +28,10 @@
 
 @property(nonatomic, strong) AudioDeviceModuleObserver *rtcAudioDeviceModuleObserver;
 
+// Accessed only on the worker queue. Lifecycle requests wait for both teardown phases.
+@property(nonatomic, strong) NSMutableArray<dispatch_block_t> *pendingFactoryOperations;
+@property(nonatomic, assign) BOOL factoryDisposalPending;
+
 @end
 
 @implementation WebRTCModule
@@ -120,6 +124,7 @@
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
         _localTracks = [NSMutableDictionary new];
+        _pendingFactoryOperations = [NSMutableArray new];
 
         dispatch_queue_attr_t attributes =
             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
@@ -201,25 +206,53 @@ RCT_EXPORT_METHOD(createCallFactory
                   : (RCTPromiseRejectBlock)reject) {
     BOOL bypassVoiceProcessing = [options[@"bypassVoiceProcessing"] boolValue];
 
-    // This makes default factory being disposed in a proper sequence.
-    if ([self.factoryRegistry isBareForkDefaultLive]) {
-        RCTLogInfo(@"createCallFactory(): tearing down stale bare-fork default (ordered) before "
-                    "creating the call factory");
-        [self disposeCurrentFactoryOrdered];
-    }
+    [self runFactoryOperation:^{
+        void (^create)(void) = ^{
+            PeerConnectionFactoryProvider *factory = [self.factoryRegistry create:bypassVoiceProcessing];
+            if (factory == nil) {
+                reject(@"E_FACTORY_CREATE", @"Failed to create call factory: registry is disposed", nil);
+                return;
+            }
+            resolve(nil);
+        };
 
-    PeerConnectionFactoryProvider *factory = [self.factoryRegistry create:bypassVoiceProcessing];
-    if (factory == nil) {
-        reject(@"E_FACTORY_CREATE", @"Failed to create call factory: registry is disposed", nil);
-        return;
-    }
-    resolve(nil);
+        // Tear a stale bare-fork default down in order first. The teardown is two-phase, so the new
+        // factory must be built from the completion — building it inline would create it while the
+        // old factory's PeerConnections were still alive.
+        if ([self.factoryRegistry isBareForkDefaultLive]) {
+            RCTLogInfo(@"createCallFactory(): tearing down stale bare-fork default (ordered) before "
+                        "creating the call factory");
+            [self disposeCurrentFactoryOrdered:^(BOOL disposed) {
+                create();
+            }];
+        } else {
+            create();
+        }
+    }];
 }
 
 RCT_EXPORT_METHOD(disposeCallFactory
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
-    resolve(@([self disposeCurrentFactoryOrdered]));
+    [self runFactoryOperation:^{
+        [self disposeCurrentFactoryOrdered:^(BOOL disposed) {
+            resolve(@(disposed));
+        }];
+    }];
+}
+
+// Must be called on the worker queue (the module's methodQueue).
+- (void)runFactoryOperation:(dispatch_block_t)operation {
+    [self.pendingFactoryOperations addObject:operation];
+    [self drainFactoryOperations];
+}
+
+- (void)drainFactoryOperations {
+    while (!self.factoryDisposalPending && self.pendingFactoryOperations.count > 0) {
+        dispatch_block_t operation = self.pendingFactoryOperations.firstObject;
+        [self.pendingFactoryOperations removeObjectAtIndex:0];
+        operation();
+    }
 }
 
 /**
@@ -227,16 +260,43 @@ RCT_EXPORT_METHOD(disposeCallFactory
  * streams → video-effects processor → factory + ADM. Everything is ARC-refcounted, so the factory
  * is freed only when its LAST reference drops — every dependent that strong-refs it (PCs, tracks,
  * streams, and the videoEffectProcessor associated object) must be released first or the factory
- * leaks. No-op unless this is the last reference; returns whether it disposed the factory.
+ * leaks. No-op unless this is the last reference; `onDisposed` receives whether the factory was
+ * actually disposed.
+ *
+ * Split across two worker-queue turns: phase 1 only closes the PeerConnections, phase 2 disposes
+ * them and everything else. -[RTCPeerConnection close] is synchronous and its delegate callbacks
+ * dispatch_async onto the worker queue before it returns, so phase 2 (queued after them) runs
+ * only once that backlog has drained against still-registered PeerConnections.
  */
-- (BOOL)disposeCurrentFactoryOrdered {
+- (void)disposeCurrentFactoryOrdered:(void (^)(BOOL disposed))onDisposed {
     if (![self.factoryRegistry releaseReference]) {
-        return NO;
+        onDisposed(NO);
+        return;
     }
 
+    self.factoryDisposalPending = YES;
     for (NSNumber *pcId in [self.peerConnections.allKeys copy]) {
         @try {
             [self peerConnectionClose:pcId];
+        } @catch (NSException *e) {
+            RCTLogWarn(@"disposeCurrentFactoryOrdered(): error closing pc %@: %@", pcId, e.reason);
+        }
+    }
+
+    dispatch_async(self.workerQueue, ^{
+        @try {
+            [self disposeCurrentFactoryDependents];
+            onDisposed([self.factoryRegistry disposeCurrent]);
+        } @finally {
+            self.factoryDisposalPending = NO;
+            [self drainFactoryOperations];
+        }
+    });
+}
+
+- (void)disposeCurrentFactoryDependents {
+    for (NSNumber *pcId in [self.peerConnections.allKeys copy]) {
+        @try {
             [self peerConnectionDispose:pcId];
         } @catch (NSException *e) {
             RCTLogWarn(@"disposeCurrentFactoryOrdered(): error disposing pc %@: %@", pcId, e.reason);
@@ -267,8 +327,6 @@ RCT_EXPORT_METHOD(disposeCallFactory
     }
 
     self.videoEffectProcessor = nil;
-
-    return [self.factoryRegistry disposeCurrent];
 }
 
 - (NSArray<NSString *> *)supportedEvents {

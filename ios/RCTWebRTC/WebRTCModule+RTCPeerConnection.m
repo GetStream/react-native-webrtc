@@ -78,6 +78,27 @@
 
 static NSMutableDictionary<NSString *, RTCCertificate *> *gCertificates = nil;
 
+/*
+ * Runs `block` on the worker queue only if `pc` is still the live PeerConnection for its tag;
+ * otherwise rejects (when `reject` is given) or skips. libwebrtc callbacks can be queued behind
+ * peerConnectionDispose, and running them afterwards would mutate a disposed PeerConnection or
+ * resolve a promise from it.
+ */
+static void RunOnLivePeerConnection(WebRTCModule *module,
+                                    RTCPeerConnection *pc,
+                                    RCTPromiseRejectBlock _Nullable reject,
+                                    dispatch_block_t block) {
+    dispatch_async(module.workerQueue, ^{
+        if (module.peerConnections[pc.reactTag] != pc) {
+            if (reject) {
+                reject(@"E_PC_DISPOSED", @"PeerConnection disposed", nil);
+            }
+            return;
+        }
+        block();
+    });
+}
+
 @implementation WebRTCModule (RTCPeerConnection)
 
 + (void)initialize {
@@ -160,7 +181,7 @@ RCT_EXPORT_METHOD(peerConnectionCreateOffer
     }
 
     RTCCreateSessionDescriptionCompletionHandler handler = ^(RTCSessionDescription *desc, NSError *error) {
-        dispatch_async(self.workerQueue, ^{
+        RunOnLivePeerConnection(self, peerConnection, reject, ^{
             if (error) {
                 reject(@"E_OPERATION_ERROR", error.localizedDescription, nil);
             } else {
@@ -203,7 +224,7 @@ RCT_EXPORT_METHOD(peerConnectionCreateAnswer
                                                                              optionalConstraints:nil];
 
     RTCCreateSessionDescriptionCompletionHandler handler = ^(RTCSessionDescription *desc, NSError *error) {
-        dispatch_async(self.workerQueue, ^{
+        RunOnLivePeerConnection(self, peerConnection, reject, ^{
             if (error) {
                 reject(@"E_OPERATION_ERROR", error.localizedDescription, nil);
             } else {
@@ -232,7 +253,7 @@ RCT_EXPORT_METHOD(peerConnectionSetLocalDescription
     }
 
     RTCSetSessionDescriptionCompletionHandler handler = ^(NSError *error) {
-        dispatch_async(self.workerQueue, ^{
+        RunOnLivePeerConnection(self, peerConnection, reject, ^{
             if (error) {
                 reject(@"E_OPERATION_ERROR", error.localizedDescription, nil);
             } else {
@@ -276,7 +297,7 @@ RCT_EXPORT_METHOD(peerConnectionSetRemoteDescription
     }
 
     RTCSetSessionDescriptionCompletionHandler handler = ^(NSError *error) {
-        dispatch_async(self.workerQueue, ^{
+        RunOnLivePeerConnection(self, peerConnection, reject, ^{
             if (error) {
                 reject(@"E_OPERATION_ERROR", error.localizedDescription, nil);
             } else {
@@ -323,7 +344,7 @@ RCT_EXPORT_METHOD(peerConnectionAddICECandidate
     }
 
     id handler = ^(NSError *error) {
-        dispatch_async(self.workerQueue, ^{
+        RunOnLivePeerConnection(self, peerConnection, reject, ^{
             if (error) {
                 reject(@"E_OPERATION_ERROR", @"addIceCandidate failed", error);
             } else {
@@ -870,7 +891,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
 }
 
 - (void)peerConnection:(RTCPeerConnection *)peerConnection didGenerateIceCandidate:(RTCIceCandidate *)candidate {
-    dispatch_async(self.workerQueue, ^{
+    RunOnLivePeerConnection(self, peerConnection, nil, ^{
         id newSdp = @{};
         // Can happen when doing a rollback.
         if (peerConnection.localDescription) {
@@ -894,7 +915,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
 }
 
 - (void)peerConnection:(RTCPeerConnection *)peerConnection didOpenDataChannel:(RTCDataChannel *)dataChannel {
-    dispatch_async(self.workerQueue, ^{
+    RunOnLivePeerConnection(self, peerConnection, nil, ^{
         NSString *reactTag = [[NSUUID UUID] UUIDString];
         DataChannelWrapper *dcw = [[DataChannelWrapper alloc] initWithChannel:dataChannel reactTag:reactTag];
         dcw.pcId = peerConnection.reactTag;
@@ -922,7 +943,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
 - (void)peerConnection:(RTC_OBJC_TYPE(RTCPeerConnection) *)peerConnection
         didAddReceiver:(RTC_OBJC_TYPE(RTCRtpReceiver) *)rtpReceiver
                streams:(NSArray<RTC_OBJC_TYPE(RTCMediaStream) *> *)mediaStreams {
-    dispatch_async(self.workerQueue, ^{
+    RunOnLivePeerConnection(self, peerConnection, nil, ^{
         RTCRtpTransceiver *transceiver = nil;
         for (RTCRtpTransceiver *t in peerConnection.transceivers) {
             if ([rtpReceiver.receiverId isEqual:t.receiver.receiverId]) {
@@ -997,7 +1018,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(peerConnectionRemoveTrack
 
 - (void)peerConnection:(RTC_OBJC_TYPE(RTCPeerConnection) *)peerConnection
      didRemoveReceiver:(RTC_OBJC_TYPE(RTCRtpReceiver) *)rtpReceiver {
-    dispatch_async(self.workerQueue, ^{
+    RunOnLivePeerConnection(self, peerConnection, nil, ^{
         // Tear down track adapters so a subsequent didAddReceiver with the
         // same trackId (SFU participant rejoin) creates a fresh adapter on
         // the new RTCMediaStreamTrack object. Without this, the old renderer
