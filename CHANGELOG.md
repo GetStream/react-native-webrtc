@@ -1,3 +1,9 @@
+## [145.4.0](https://github.com/GetStream/react-native-webrtc/compare/v145.3.3...v145.4.0) (2026-09-28)
+
+### Features
+
+* add end-to-end encryption support ([#68](https://github.com/GetStream/react-native-webrtc/issues/68)) ([669ad14](https://github.com/GetStream/react-native-webrtc/commit/669ad1440f34ab71204db7b28058bc8a2e4b288c))
+
 ## [145.3.3](https://github.com/GetStream/react-native-webrtc/compare/v145.3.2...v145.3.3) (2026-09-23)
 
 ### Bug Fixes
