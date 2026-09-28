@@ -1,3 +1,10 @@
+## [145.3.3](https://github.com/GetStream/react-native-webrtc/compare/v145.3.2...v145.3.3) (2026-09-23)
+
+### Bug Fixes
+
+* **android:** skip explicit Kotlin plugin when AGP registers the kotlin extension ([#67](https://github.com/GetStream/react-native-webrtc/issues/67)) ([5601e99](https://github.com/GetStream/react-native-webrtc/commit/5601e997445e2343fab6c761da57b68bbe5a34a9))
+* fixed pc close/dispose race ([#70](https://github.com/GetStream/react-native-webrtc/issues/70)) ([36956b9](https://github.com/GetStream/react-native-webrtc/commit/36956b94eb4c6437a32959861b1ebb2eeafd1015))
+
 ## [145.3.1](https://github.com/GetStream/react-native-webrtc/compare/v145.3.0...v145.3.1) (2026-08-14)
 
 ### Bug Fixes
