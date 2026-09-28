@@ -37,6 +37,16 @@
 }
 
 - (void)dealloc {
+    // E2EE managers first: their frame transforms are held by the senders and receivers of the peer
+    // connections closed below, and nothing in JS survives to dispose them.
+    for (NSString *handle in _encryptionManagers) {
+        RTC_OBJC_TYPE(RTCEncryptionManager) *manager = _encryptionManagers[handle];
+        manager.delegate = nil;
+        [manager dispose];
+    }
+    [_encryptionManagers removeAllObjects];
+    _encryptionManagers = nil;
+
     [_localTracks removeAllObjects];
     _localTracks = nil;
     [_localStreams removeAllObjects];
@@ -120,6 +130,7 @@
         _peerConnections = [NSMutableDictionary new];
         _localStreams = [NSMutableDictionary new];
         _localTracks = [NSMutableDictionary new];
+        _encryptionManagers = [NSMutableDictionary new];
 
         dispatch_queue_attr_t attributes =
             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
@@ -296,7 +307,8 @@ RCT_EXPORT_METHOD(disposeCallFactory
         kEventAudioDeviceModuleEngineDidDisable,
         kEventAudioDeviceModuleEngineWillRelease,
         kEventAudioDeviceModuleDevicesUpdated,
-        kEventAudioDeviceModuleAudioProcessingStateUpdated
+        kEventAudioDeviceModuleAudioProcessingStateUpdated,
+        kEventEncryptionManagerEvent
     ];
 }
 

@@ -32,6 +32,7 @@ static NSString *const kEventAudioDeviceModuleEngineWillRelease = @"audioDeviceM
 static NSString *const kEventAudioDeviceModuleDevicesUpdated = @"audioDeviceModuleDevicesUpdated";
 static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
     @"audioDeviceModuleAudioProcessingStateUpdated";
+static NSString *const kEventEncryptionManagerEvent = @"encryptionManagerEvent";
 
 @class AudioDeviceModule;
 @class CaptureController;
@@ -52,6 +53,8 @@ static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
 @property(nonatomic, strong) NSMutableDictionary<NSNumber *, RTCPeerConnection *> *peerConnections;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStream *> *localStreams;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStreamTrack *> *localTracks;
+@property(nonatomic, strong)
+    NSMutableDictionary<NSString *, RTC_OBJC_TYPE(RTCEncryptionManager) *> *encryptionManagers;
 
 @property(nonatomic, weak) id<RTCCameraPreviewControl> activeCameraPreview;
 

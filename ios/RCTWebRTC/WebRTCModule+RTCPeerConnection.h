@@ -19,4 +19,9 @@
 - (void)peerConnectionClose:(nonnull NSNumber *)objectID;
 - (void)peerConnectionDispose:(nonnull NSNumber *)objectID;
 
+- (nullable RTCRtpSender *)getSenderByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                             senderId:(nonnull NSString *)senderId;
+- (nullable RTCRtpReceiver *)getReceiverByPeerConnectionId:(nonnull NSNumber *)peerConnectionId
+                                               receiverId:(nonnull NSString *)receiverId;
+
 @end
