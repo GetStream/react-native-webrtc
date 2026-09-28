@@ -104,6 +104,9 @@ export default class RTCEncryptionManager {
      * `codec` is an exact lowercase pin (`opus`/`vp8`/`vp9`/`h264`); anything else fails closed.
      * Omitting it reads the codec from the frame. Omitting `trackType` defaults to audio vs video
      * from the sender, so screen-share types must be passed explicitly.
+     *
+     * Call this before the sender has a track or is negotiated to send. Frames sent
+     * before the transform is attached go out unencrypted.
      */
     encrypt(sender: RTCRtpSender, codec?: string, trackType?: RTCEncryptionTrackType): void {
         this._invoke('encryptionManagerEncrypt', {

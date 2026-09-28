@@ -267,8 +267,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         try {
             ThreadUtils
                     .submitToExecutor(() -> {
-                        // 0. Dispose E2EE managers: their frame transforms are held by the senders and
-                        // receivers of the PeerConnections disposed next.
+                        // 0. Dispose E2EE managers. JS is gone after a reload, so nothing else can
+                        //    release them. The order relative to the PeerConnections does not matter
+                        //    for safety; on a normal leave the PeerConnections go first.
                         encryptionManagerBridge.disposeAll();
 
                         // 1. Dispose PeerConnections (dispose() calls close() internally)
@@ -725,17 +726,13 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         if (local != null) {
             return local;
         }
+        // Use the track wrapper the observer keeps. Do not use pc.getReceivers() here:
+        // it disposes the wrappers from its previous call, which detaches their sinks.
         for (int i = 0, size = mPeerConnectionObservers.size(); i < size; i++) {
             PeerConnectionObserver pco = mPeerConnectionObservers.valueAt(i);
-            PeerConnection pc = pco.getPeerConnection();
-            if (pc == null) {
-                continue;
-            }
-            for (RtpReceiver receiver : pc.getReceivers()) {
-                MediaStreamTrack track = receiver.track();
-                if (track != null && trackId.equals(track.id())) {
-                    return track;
-                }
+            MediaStreamTrack track = pco.remoteTracks.get(trackId);
+            if (track != null) {
+                return track;
             }
         }
         return null;

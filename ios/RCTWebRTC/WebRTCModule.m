@@ -37,8 +37,8 @@
 }
 
 - (void)dealloc {
-    // E2EE managers first: their frame transforms are held by the senders and receivers of the peer
-    // connections closed below, and nothing in JS survives to dispose them.
+    // Dispose E2EE managers. JS is gone, so nothing else can release them. The order
+    // relative to the peer connections does not matter for safety.
     for (NSString *handle in _encryptionManagers) {
         RTC_OBJC_TYPE(RTCEncryptionManager) *manager = _encryptionManagers[handle];
         manager.delegate = nil;

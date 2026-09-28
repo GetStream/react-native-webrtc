@@ -292,34 +292,46 @@ class EncryptionManagerBridge {
         @Override
         public void onE2eeEvent(EncryptionManager.E2eeEvent event) {
             WritableMap params = Arguments.createMap();
-            params.putString("managerId", handle);
-            params.putString("type", event.type.name);
-            params.putString("userId", event.userId);
+            try {
+                params.putString("managerId", handle);
+                params.putString("type", event.type.name);
+                params.putString("userId", event.userId);
 
-            if (event.trackType != null) {
-                params.putInt("trackType", event.trackType.getValue());
-            }
-            if (event.keyIndex != null) {
-                params.putInt("keyIndex", event.keyIndex);
-            }
-            if (event.version != null) {
-                params.putInt("version", event.version);
-            }
-            if (event.reason != null) {
-                params.putString("reason", event.reason);
-            }
-            if (event.keyState != null) {
-                params.putMap("keyState", keyStateToMap(event.keyState));
-            }
-            if (event.encode != null) {
-                params.putArray("encode", trackPerfToArray(event.encode));
-            }
-            if (event.decode != null) {
-                params.putArray("decode", trackPerfToArray(event.decode));
+                if (event.trackType != null) {
+                    params.putInt("trackType", event.trackType.getValue());
+                }
+                if (event.keyIndex != null) {
+                    params.putInt("keyIndex", event.keyIndex);
+                }
+                if (event.version != null) {
+                    params.putInt("version", event.version);
+                }
+                if (event.reason != null) {
+                    params.putString("reason", event.reason);
+                }
+                if (event.keyState != null) {
+                    params.putMap("keyState", keyStateToMap(event.keyState));
+                }
+                if (event.encode != null) {
+                    params.putArray("encode", trackPerfToArray(event.encode));
+                }
+                if (event.decode != null) {
+                    params.putArray("decode", trackPerfToArray(event.decode));
+                }
+            } catch (RuntimeException e) {
+                // A broken event is dropped; keys and transforms are not affected.
+                Log.w(TAG, "onE2eeEvent(): dropping event", e);
+                return;
             }
 
             // This callback runs on the crypto worker; events must be emitted off it.
-            ThreadUtils.runOnExecutor(() -> webRTCModule.sendEvent("encryptionManagerEvent", params));
+            ThreadUtils.runOnExecutor(() -> {
+                try {
+                    webRTCModule.sendEvent("encryptionManagerEvent", params);
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "onE2eeEvent(): dropping event", e);
+                }
+            });
         }
     }
 
