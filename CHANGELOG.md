@@ -1,3 +1,9 @@
+## [145.4.1](https://github.com/GetStream/react-native-webrtc/compare/v145.4.0...v145.4.1) (2026-09-28)
+
+### Bug Fixes
+
+* **android:** E2EE review follow-ups ([#73](https://github.com/GetStream/react-native-webrtc/issues/73)) ([bb6a629](https://github.com/GetStream/react-native-webrtc/commit/bb6a6291aaea2f3ea7a1a6c3fcba71b2904bb081))
+
 ## [145.4.0](https://github.com/GetStream/react-native-webrtc/compare/v145.3.3...v145.4.0) (2026-09-28)
 
 ### Features
