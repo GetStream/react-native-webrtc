@@ -725,17 +725,13 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         if (local != null) {
             return local;
         }
+        // Use the track wrapper the observer keeps. Do not use pc.getReceivers() here:
+        // it disposes the wrappers from its previous call, which detaches their sinks.
         for (int i = 0, size = mPeerConnectionObservers.size(); i < size; i++) {
             PeerConnectionObserver pco = mPeerConnectionObservers.valueAt(i);
-            PeerConnection pc = pco.getPeerConnection();
-            if (pc == null) {
-                continue;
-            }
-            for (RtpReceiver receiver : pc.getReceivers()) {
-                MediaStreamTrack track = receiver.track();
-                if (track != null && trackId.equals(track.id())) {
-                    return track;
-                }
+            MediaStreamTrack track = pco.remoteTracks.get(trackId);
+            if (track != null) {
+                return track;
             }
         }
         return null;
