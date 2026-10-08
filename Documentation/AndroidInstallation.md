@@ -1,6 +1,6 @@
 # Android Installation
 
-Starting with React Native 0.60 due to a new auto linking feature you no longer need to follow manual linking steps but you will need to follow the other steps below if you plan on releasing your app to production.  
+React Native autolinking handles native linking, but you will need to follow the other steps below if you plan on releasing your app to production.  
 
 See a sample app in the `examples/GumTestApp` directory.  
 
@@ -51,17 +51,6 @@ application, in your main activity's `onCreate` for instance:
     // Initialize the WebRTC module options.
     WebRTCModuleOptions options = WebRTCModuleOptions.getInstance();
     options.enableMediaProjectionService = true;
-```
-
-## Enable Java 8 Support
-
-In `android/app/build.gradle` add the following inside the `android` section.
-
-```gradle
-compileOptions {
-	sourceCompatibility JavaVersion.VERSION_1_8
-	targetCompatibility JavaVersion.VERSION_1_8
-}
 ```
 
 ## R8/ProGuard Support

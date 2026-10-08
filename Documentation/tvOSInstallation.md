@@ -2,11 +2,11 @@
 
 In order to use React Native on tvOS, you will need to use [react-native-tvos](https://www.npmjs.com/package/react-native-tvos).  
 tvOS support was deprecated and removed from current/future versions of React Native.  
-We strongly recommend using React Native 0.69+ with React 18+  
+We strongly recommend using React Native 0.79+ with React 18+  
 
 Change the following dependency in your projects `package.json` file to get started. 
 ``` 
-"react-native": "npm:react-native-tvos@0.69.8-2" 
+"react-native": "npm:react-native-tvos@0.79.7-1" 
 ```
 
 ## Adjusting the supported platform version
