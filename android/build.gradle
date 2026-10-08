@@ -1,20 +1,3 @@
-buildscript {
-    ext.getExtOrDefault = {name, fallback ->
-        return rootProject.ext.has(name) ? rootProject.ext.get(name) : fallback
-    }
-
-    repositories {
-        google()
-        mavenCentral()
-    }
-
-    dependencies {
-        classpath("com.android.tools.build:gradle:7.3.1")
-        // noinspection DifferentKotlinGradleVersion
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${getExtOrDefault('kotlinVersion', '1.8.10')}"
-    }
-}
-
 apply plugin: "com.android.library"
 // AGP 9 ships built-in Kotlin support and registers the `kotlin` extension
 // itself. Applying the Kotlin plugin on top of it fails configuration with
@@ -68,9 +51,7 @@ android {
     }
 }
 
-def kotlin_version = getExtOrDefault('kotlinVersion', '1.8.10')
-
-println "Building Stream WebRTC React Native module with Kotlin version: $kotlin_version"
+def kotlin_version = safeExtGet('kotlinVersion', '2.0.21')
 
 dependencies {
     api 'io.getstream:stream-video-webrtc-android:145.17.0'
