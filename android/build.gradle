@@ -74,7 +74,7 @@ println "Building Stream WebRTC React Native module with Kotlin version: $kotlin
 
 dependencies {
     api 'io.getstream:stream-video-webrtc-android:145.17.0'
-    implementation "com.facebook.react:react-android:+"
+    implementation "com.facebook.react:react-android"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "androidx.core:core:1.7.0"
 }
