@@ -53,17 +53,6 @@ application, in your main activity's `onCreate` for instance:
     options.enableMediaProjectionService = true;
 ```
 
-## Enable Java 8 Support
-
-In `android/app/build.gradle` add the following inside the `android` section.
-
-```gradle
-compileOptions {
-	sourceCompatibility JavaVersion.VERSION_1_8
-	targetCompatibility JavaVersion.VERSION_1_8
-}
-```
-
 ## R8/ProGuard Support
 
 In `android/app/proguard-rules.pro` add the following on a new line.

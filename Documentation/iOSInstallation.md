@@ -8,11 +8,10 @@ See a sample app in the `examples/GumTestApp` directory.
 
 **IMPORTANT:** Make sure you are using CocoaPods 1.10 or higher.  
 You may have to change the `platform` field in your podfile.  
-`react-native-webrtc` doesn't support iOS < 12 
-Set it to '12.0' or above or you'll get an error when running `pod install`.
+`react-native-webrtc` requires iOS 15.1 or above (the React Native 0.79+ default).
 
 ```
-platform :ios, '12.0'
+platform :ios, min_ios_version_supported
 ```
 
 ## Declaring Permissions
