@@ -1,3 +1,4 @@
+#import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
 
 #import <React/RCTBridge.h>
@@ -120,6 +121,110 @@ RCT_EXPORT_METHOD(audioDeviceModuleStopLocalRecording
                      code:@"recording_error"
                   resolve:resolve
                    reject:reject];
+}
+
+#pragma mark - Engine Recovery
+
+- (BOOL)isMicrophonePermissionGranted {
+#if TARGET_OS_OSX || TARGET_OS_TV
+    return YES;
+#else
+    if (@available(iOS 17.0, *)) {
+        return AVAudioApplication.sharedInstance.recordPermission == AVAudioApplicationRecordPermissionGranted;
+    }
+    return AVAudioSession.sharedInstance.recordPermission == AVAudioSessionRecordPermissionGranted;
+#endif
+}
+
+// The ADM can record a failed AVAudioEngine start as running, so later starts are no-ops and the mic stays dead.
+// Detects a dead (requested but not running) or output-only engine and restarts it. ADM return codes are reported
+// in `codes`; this never rejects. Uses `resolveCurrentOrNil` (not RAW_ADM) so it never builds a default factory.
+RCT_EXPORT_METHOD(audioDeviceModuleRecoverEngineIfNeeded
+                  : (BOOL)wantsRecording resolver
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
+    RTCAudioDeviceModule *adm = [self.factoryRegistry resolveCurrentOrNil].factory.audioDeviceModule;
+    if (!adm) {
+        resolve(@{@"result" : @"skipped", @"reason" : @"noCall", @"before" : [NSNull null], @"codes" : @{}});
+        return;
+    }
+
+    NSDictionary *before = [self engineStateForADM:adm];
+    BOOL isPlaying = [before[@"isPlaying"] boolValue];
+    BOOL isRecording = [before[@"isRecording"] boolValue];
+    BOOL isEngineRunning = [before[@"isEngineRunning"] boolValue];
+    BOOL isInputAvailable = [before[@"isInputAvailable"] boolValue];
+    BOOL isOutputAvailable = [before[@"isOutputAvailable"] boolValue];
+    BOOL micGranted = [self isMicrophonePermissionGranted];
+
+    BOOL needsInput = wantsRecording && micGranted && isInputAvailable;
+    BOOL needsOutput = isPlaying && isOutputAvailable;
+
+    NSMutableDictionary<NSString *, NSNumber *> *codes = [NSMutableDictionary dictionary];
+    NSString *result;
+    NSString *reason = nil;
+    NSDictionary *after = nil;
+
+    if (!needsInput && !needsOutput) {
+        result = @"skipped";
+        if ((wantsRecording && micGranted && !isInputAvailable) || (isPlaying && !isOutputAvailable)) {
+            reason = @"gated";
+        } else if (wantsRecording && !micGranted) {
+            reason = @"noMicPermission";
+        }
+    } else if (!(needsInput && !isRecording) && isEngineRunning) {
+        result = @"healthy";
+    } else {
+        if (needsInput) {
+            // Straight-line (no early return) so prepared mode is always restored.
+            BOOL wasPrepared = adm.isRecordingAlwaysPreparedMode;
+            if (wasPrepared) {
+                codes[@"setPreparedOff"] = @([adm setRecordingAlwaysPreparedMode:NO]);
+            }
+            if (isRecording) {
+                codes[@"stopRecording"] = @([adm stopRecording]);
+            }
+            if (adm.isRecordingInitialized) {
+                codes[@"startRecording"] = @([adm startRecording]);
+            } else {
+                codes[@"initAndStartRecording"] = @([adm initAndStartRecording]);
+            }
+            codes[@"unmute"] = @([adm setMicrophoneMuted:NO]);
+            if (wasPrepared) {
+                codes[@"restorePrepared"] = @([adm setRecordingAlwaysPreparedMode:YES]);
+            }
+        } else {
+            codes[@"stopPlayout"] = @([adm stopPlayout]);
+            codes[@"initPlayout"] = @([adm initPlayout]);
+            codes[@"startPlayout"] = @([adm startPlayout]);
+        }
+
+        after = [self engineStateForADM:adm];
+        BOOL afterRunning = [after[@"isEngineRunning"] boolValue];
+        BOOL afterRecording = [after[@"isRecording"] boolValue];
+        if (afterRunning && (!needsInput || afterRecording)) {
+            result = @"recovered";
+        } else if (afterRunning) {
+            result = @"outputOnly";
+        } else {
+            result = @"failed";
+        }
+    }
+
+    NSLog(@"[WebRTCModule] recoverEngineIfNeeded result=%@ reason=%@ before=%@ after=%@ codes=%@",
+          result,
+          reason,
+          before,
+          after,
+          codes);
+
+    NSMutableDictionary *response = [NSMutableDictionary dictionary];
+    response[@"result"] = result;
+    response[@"reason"] = reason;
+    response[@"before"] = before;
+    response[@"after"] = after;
+    response[@"codes"] = codes;
+    resolve(response);
 }
 
 #pragma mark - Microphone Control
