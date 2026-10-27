@@ -1,5 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 
+import type { EngineErrorEventData } from './AudioDeviceModuleEvents';
+
 const { WebRTCModule } = NativeModules;
 
 export enum AudioEngineMuteMode {
@@ -290,5 +292,18 @@ export class AudioDeviceModule {
         }
 
         return WebRTCModule.audioDeviceModuleRecoverEngineIfNeeded(wantsRecording);
+    }
+
+    /**
+     * Recent audio device module warning/error log lines (at most 50, oldest first), the same lines delivered by
+     * `audioDeviceModuleEvents.addEngineErrorListener` but without collapsing or rate limiting.
+     * Android resolves `[]` without a native call.
+     */
+    static async getRecentEngineErrors(): Promise<EngineErrorEventData[]> {
+        if (Platform.OS === 'android') {
+            return [];
+        }
+
+        return WebRTCModule.audioDeviceModuleGetRecentEngineErrors();
     }
 }

@@ -61,6 +61,12 @@ RCT_EXPORT_METHOD(audioDeviceModuleGetEngineState
     resolve(adm ? [self engineStateForADM:adm] : nil);
 }
 
+RCT_EXPORT_METHOD(audioDeviceModuleGetRecentEngineErrors
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
+    resolve([self recentEngineErrors]);
+}
+
 #pragma mark - Recording & Playback Control
 
 RCT_EXPORT_METHOD(audioDeviceModuleStartPlayout
