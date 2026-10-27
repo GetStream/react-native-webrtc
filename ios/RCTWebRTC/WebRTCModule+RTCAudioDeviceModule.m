@@ -5,6 +5,13 @@
 
 #import "WebRTCModule.h"
 
+// Import Swift-generated header to reach PeerConnectionFactoryRegistry
+#if __has_include(<stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>)
+#import <stream_react_native_webrtc/stream_react_native_webrtc-Swift.h>
+#elif __has_include("stream_react_native_webrtc-Swift.h")
+#import "stream_react_native_webrtc-Swift.h"
+#endif
+
 // The underlying `RTCAudioDeviceModule` is owned by the `RTCPeerConnectionFactory`.
 // `WebRTCModule.audioDeviceModule` is a Swift wrapper around it, so we reach for the
 // raw device module here when we need to call APIs that are only defined on
@@ -23,6 +30,34 @@
     } else {
         reject(code, [NSString stringWithFormat:@"Failed to %@: %ld", op, (long)result], nil);
     }
+}
+
+// Reads every property once: each ADM getter is a blocking hop to the WebRTC worker thread.
+- (NSDictionary *)engineStateForADM:(RTCAudioDeviceModule *)adm {
+    RTCAudioEngineAvailability availability = adm.engineAvailability;
+    RTCAudioSession *session = [RTCAudioSession sharedInstance];
+    return @{
+        @"isPlaying" : @(adm.isPlaying),
+        @"isRecording" : @(adm.isRecording),
+        @"isEngineRunning" : @(adm.isEngineRunning),
+        @"isMicrophoneMuted" : @(adm.isMicrophoneMuted),
+        @"isRecordingAlwaysPreparedMode" : @(adm.isRecordingAlwaysPreparedMode),
+        @"isInputAvailable" : @(availability.isInputAvailable),
+        @"isOutputAvailable" : @(availability.isOutputAvailable),
+        @"isVoiceProcessingEnabled" : @(adm.isVoiceProcessingEnabled),
+        @"sessionCategory" : session.category ?: [NSNull null],
+        @"sessionActive" : @(session.isActive),
+    };
+}
+
+#pragma mark - Engine State
+
+// Uses `resolveCurrentOrNil` (not RAW_ADM) so querying never builds a default factory.
+RCT_EXPORT_METHOD(audioDeviceModuleGetEngineState
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject) {
+    RTCAudioDeviceModule *adm = [self.factoryRegistry resolveCurrentOrNil].factory.audioDeviceModule;
+    resolve(adm ? [self engineStateForADM:adm] : nil);
 }
 
 #pragma mark - Recording & Playback Control

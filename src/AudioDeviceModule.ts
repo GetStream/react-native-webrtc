@@ -10,6 +10,26 @@ export enum AudioEngineMuteMode {
 }
 
 /**
+ * Snapshot of the iOS audio engine state, read in a single native call.
+ */
+export interface AudioEngineStateSnapshot {
+    /** Playout requested by WebRTC (not proof the engine is running). */
+    isPlaying: boolean;
+    /** Recording requested by WebRTC (not proof the engine is running). */
+    isRecording: boolean;
+    /** Whether the underlying AVAudioEngine is actually running. */
+    isEngineRunning: boolean;
+    isMicrophoneMuted: boolean;
+    isRecordingAlwaysPreparedMode: boolean;
+    isInputAvailable: boolean;
+    isOutputAvailable: boolean;
+    isVoiceProcessingEnabled: boolean;
+    /** Current `AVAudioSession` category, or `null` if unavailable. */
+    sessionCategory: string | null;
+    sessionActive: boolean;
+}
+
+/**
  * Returns the native WebRTCModule after verifying the platform is iOS/macOS.
  * Throws on Android where these audio device module APIs are not available.
  */
@@ -211,7 +231,16 @@ export class AudioDeviceModule {
         return getAudioDeviceModule().audioDeviceModuleSetRecordingAlwaysPreparedMode(enabled);
     }
 
-    // TODO: getEngineAvailability / setEngineAvailability are not supported by the
-    // Stream WebRTC SDK (no RTCAudioEngineAvailability type / setEngineAvailability:
-    // method). Re-add if/when the native API lands.
+    /**
+     * Get a snapshot of the audio engine state in one native call.
+     * `isRecording` / `isPlaying` reflect what WebRTC requested; `isEngineRunning` is the real engine state.
+     * Resolves `null` when no call factory is live (iOS) and always on Android (no native call).
+     */
+    static async getEngineState(): Promise<AudioEngineStateSnapshot | null> {
+        if (Platform.OS === 'android') {
+            return null;
+        }
+
+        return WebRTCModule.audioDeviceModuleGetEngineState();
+    }
 }
