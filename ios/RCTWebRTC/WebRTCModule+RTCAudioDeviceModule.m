@@ -145,10 +145,13 @@ RCT_EXPORT_METHOD(audioDeviceModuleStopLocalRecording
 // The ADM can record a failed AVAudioEngine start as running, so later starts are no-ops and the mic stays dead.
 // Detects a dead (requested but not running) or output-only engine and restarts it. ADM return codes are reported
 // in `codes`; this never rejects. Uses `resolveCurrentOrNil` (not RAW_ADM) so it never builds a default factory.
+// On `failed` / `outputOnly`, `recentErrors` holds the ADM log lines buffered since entry: the logger handler runs
+// synchronously during the ADM calls, so their lines are already in the buffer when the calls return.
 RCT_EXPORT_METHOD(audioDeviceModuleRecoverEngineIfNeeded
                   : (BOOL)wantsRecording resolver
                   : (RCTPromiseResolveBlock)resolve rejecter
                   : (RCTPromiseRejectBlock)reject) {
+    double startMs = [NSDate date].timeIntervalSince1970 * 1000.0;
     RTCAudioDeviceModule *adm = [self.factoryRegistry resolveCurrentOrNil].factory.audioDeviceModule;
     if (!adm) {
         resolve(@{@"result" : @"skipped", @"reason" : @"noCall", @"before" : [NSNull null], @"codes" : @{}});
@@ -230,6 +233,12 @@ RCT_EXPORT_METHOD(audioDeviceModuleRecoverEngineIfNeeded
     response[@"before"] = before;
     response[@"after"] = after;
     response[@"codes"] = codes;
+    if ([result isEqualToString:@"failed"] || [result isEqualToString:@"outputOnly"]) {
+        NSPredicate *sinceStart = [NSPredicate predicateWithBlock:^BOOL(NSDictionary *entry, NSDictionary *bindings) {
+            return [entry[@"timestamp"] doubleValue] >= startMs;
+        }];
+        response[@"recentErrors"] = [[self recentEngineErrors] filteredArrayUsingPredicate:sinceStart];
+    }
     resolve(response);
 }
 

@@ -58,6 +58,11 @@ export interface RecoverEngineResult {
     after?: AudioEngineStateSnapshot;
     /** Native ADM return codes per recovery step (0 = success). */
     codes: Record<string, number>;
+    /**
+     * ADM warning/error log lines logged during this call (oldest first, uncollapsed);
+     * only present when `result` is `failed` or `outputOnly`.
+     */
+    recentErrors?: EngineErrorEventData[];
 }
 
 /**
@@ -284,7 +289,8 @@ export class AudioDeviceModule {
      * Unmutes the ADM microphone when it restarts recording, so pass `wantsRecording` only when the app wants the
      * mic on. May block the native module queue for ~2 s; callers must limit how often they call this. Do not change
      * the stereo preference or engine availability concurrently.
-     * Never rejects for ADM errors. Android resolves `{ result: 'skipped' }` without a native call.
+     * Never rejects for ADM errors; on `failed` / `outputOnly` the result carries `recentErrors` (the ADM log lines
+     * that explain why). Android resolves `{ result: 'skipped' }` without a native call.
      */
     static async recoverEngineIfNeeded(wantsRecording: boolean): Promise<RecoverEngineResult> {
         if (Platform.OS === 'android') {
