@@ -33,7 +33,7 @@ export interface AudioEngineStateSnapshot {
 
 /**
  * Outcome of {@link AudioDeviceModule.recoverEngineIfNeeded}.
- * - `healthy`: engine running as needed, nothing touched.
+ * - `healthy`: engine running as needed (with `wantsRecording`: recording and not muted), nothing touched.
  * - `skipped`: nothing to recover (see {@link RecoverEngineReason}).
  * - `recovered`: engine restarted and running as needed.
  * - `outputOnly`: engine running speaker-only (voice-processing failure), mic still dead.
@@ -284,11 +284,12 @@ export class AudioDeviceModule {
      * Detect and restart a dead or output-only audio engine.
      * A dead engine is one WebRTC requested running (`isPlaying` / `isRecording`) but `!isEngineRunning`.
      * `outputOnly` means the engine runs speaker-only after a voice-processing failure and the mic is still dead.
-     * A healthy engine is not touched.
+     * A healthy engine is not touched. With `wantsRecording`, a running, recording engine whose ADM mic is muted is
+     * unmuted (no restart) and reported as `recovered` with `codes.unmute`.
      *
-     * Unmutes the ADM microphone when it restarts recording, so pass `wantsRecording` only when the app wants the
-     * mic on. May block the native module queue for ~2 s; callers must limit how often they call this. Do not change
-     * the stereo preference or engine availability concurrently.
+     * Unmutes the ADM microphone when it restarts recording or finds it muted, so pass `wantsRecording` only when the
+     * app wants the mic on. May block the native module queue for ~2 s; callers must limit how often they call this.
+     * Do not change the stereo preference or engine availability concurrently.
      * Never rejects for ADM errors; on `failed` / `outputOnly` the result carries `recentErrors` (the ADM log lines
      * that explain why). Android resolves `{ result: 'skipped' }` without a native call.
      */

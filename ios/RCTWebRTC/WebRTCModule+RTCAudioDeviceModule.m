@@ -162,6 +162,7 @@ RCT_EXPORT_METHOD(audioDeviceModuleRecoverEngineIfNeeded
     BOOL isPlaying = [before[@"isPlaying"] boolValue];
     BOOL isRecording = [before[@"isRecording"] boolValue];
     BOOL isEngineRunning = [before[@"isEngineRunning"] boolValue];
+    BOOL isMicrophoneMuted = [before[@"isMicrophoneMuted"] boolValue];
     BOOL isInputAvailable = [before[@"isInputAvailable"] boolValue];
     BOOL isOutputAvailable = [before[@"isOutputAvailable"] boolValue];
     BOOL micGranted = [self isMicrophonePermissionGranted];
@@ -181,6 +182,13 @@ RCT_EXPORT_METHOD(audioDeviceModuleRecoverEngineIfNeeded
         } else if (wantsRecording && !micGranted) {
             reason = @"noMicPermission";
         }
+    } else if (needsInput && isRecording && isEngineRunning && isMicrophoneMuted) {
+        // Engine is fine but the ADM mic is muted, so nothing is sent: unmute only, no engine restart.
+        // Unmuting the raw ADM leaves the Swift wrapper's mute cache stale; it is diagnostics-only
+        // (`setMuted` guards on the real ADM value), same as after `initAndStartRecording` below.
+        codes[@"unmute"] = @([adm setMicrophoneMuted:NO]);
+        after = [self engineStateForADM:adm];
+        result = [after[@"isMicrophoneMuted"] boolValue] ? @"failed" : @"recovered";
     } else if (!(needsInput && !isRecording) && isEngineRunning) {
         result = @"healthy";
     } else {
