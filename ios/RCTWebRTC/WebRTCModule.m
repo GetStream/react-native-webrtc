@@ -384,6 +384,10 @@ RCT_EXPORT_METHOD(createCallFactory
         reject(@"E_FACTORY_CREATE", @"Failed to create call factory: registry is disposed", nil);
         return;
     }
+    // Fired after registration and outside the registry lock, so hooks may call into the ADM.
+    if (factory.audioDeviceModule != nil) {
+        [AudioDeviceModule notifyModuleCreated:factory.audioDeviceModule];
+    }
     resolve(nil);
 }
 

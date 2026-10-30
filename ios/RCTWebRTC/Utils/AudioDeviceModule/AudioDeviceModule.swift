@@ -288,10 +288,16 @@ import WebRTC
     /// - `didDisable`: called synchronously on the WebRTC worker thread after the engine is disabled.
     ///   Flags are the state AFTER the disable (both `false` = full stop). Cannot fail (teardown already
     ///   happened).
+    /// - `didCreateModule`: called on the WebRTCModule method queue (NOT the WebRTC worker thread) when
+    ///   `createCallFactory` has created a call factory and registered it as current, outside the registry
+    ///   lock. Fires before `createCallFactory` resolves, so before any PeerConnection, track or engine
+    ///   enable. ADM calls such as `setEngineAvailability` are allowed here. May fire again with the same
+    ///   ADM (the live factory is shared on a concurrent join): keep it idempotent. Not fired for the
+    ///   bare-fork default factory built lazily by `getOrCreateDefault`.
     ///
     /// `willEnable`, `willStart` and `didDisable` run inside the engine state transition: keep them cheap, do
     /// not call into the ADM, and do not block on other queues (deadlock risk).
-    /// `RTCAudioSession.lockForConfiguration` is NOT re-entrant.
+    /// `RTCAudioSession.lockForConfiguration` is NOT re-entrant. `didCreateModule` is the exception.
     ///
     /// Process-wide: applies to every ADM instance (the ADM is rebuilt per call factory), so register once
     /// at module init. Hooks run in registration order. Several consumers may register; each must check
@@ -324,6 +330,16 @@ import WebRTC
         engineHooksLock.lock()
         engineHooks.removeAll { $0.token === token }
         engineHooksLock.unlock()
+    }
+
+    /// Runs the registered `didCreateModule` hooks for a newly created call factory ADM.
+    ///
+    /// Internal: only `WebRTCModule.createCallFactory` calls this, after the factory is registered and
+    /// outside the registry lock. `public` only so it is exposed in the generated `-Swift.h` header.
+    @objc public static func notifyModuleCreated(_ module: AudioDeviceModule) {
+        for entry in engineHooksSnapshot() {
+            entry.didCreateModule?(module)
+        }
     }
 
     /// Snapshot of the registered hooks; handlers must be invoked outside the lock.
