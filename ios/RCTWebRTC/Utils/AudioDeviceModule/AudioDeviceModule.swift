@@ -250,17 +250,23 @@ import WebRTC
 
     /// Synchronous hook run before an engine is enabled. Non-zero fails the enable.
     public typealias EngineWillEnableHook = (_ isPlayoutEnabled: Bool, _ isRecordingEnabled: Bool) -> Int
+    /// Synchronous hook run right before an engine starts. Cannot fail the start.
+    public typealias EngineWillStartHook = (_ isPlayoutEnabled: Bool, _ isRecordingEnabled: Bool) -> Void
     /// Synchronous hook run after an engine is disabled.
     public typealias EngineDidDisableHook = (_ isPlayoutEnabled: Bool, _ isRecordingEnabled: Bool) -> Void
+    /// Hook run once a call factory's ADM has been created and registered.
+    public typealias ModuleDidCreateHook = (_ module: AudioDeviceModule) -> Void
 
-    /// Opaque token returned by ``addEngineHooks(willEnable:didDisable:)``.
+    /// Opaque token returned by ``addEngineHooks(willEnable:willStart:didDisable:didCreateModule:)``.
     private final class EngineHooksToken: NSObject {}
 
     /// A registered set of engine hooks.
     private struct EngineHooksEntry {
         let token: EngineHooksToken
         let willEnable: EngineWillEnableHook?
+        let willStart: EngineWillStartHook?
         let didDisable: EngineDidDisableHook?
+        let didCreateModule: ModuleDidCreateHook?
     }
 
     /// Process-wide hooks, in registration order. Guarded by `engineHooksLock`.
@@ -275,12 +281,17 @@ import WebRTC
     ///   unchanged; call `RTCAudioSession.setActive(true)` only if you have not activated yet, because
     ///   activations are counted). Configure the audio session here. Return non-zero to fail the enable
     ///   (WebRTC rolls it back and reports the error); the remaining hooks are then skipped.
+    /// - `willStart`: called synchronously on the WebRTC worker thread, inside the engine state
+    ///   transition, right before the engine is started. Fires on every engine (re)start, including
+    ///   restarts with no preceding `willEnable` (interruption end, route/device change). When both fire,
+    ///   it runs after `willEnable`; voice-processing mute toggles happen in between. Cannot fail the start.
     /// - `didDisable`: called synchronously on the WebRTC worker thread after the engine is disabled.
     ///   Flags are the state AFTER the disable (both `false` = full stop). Cannot fail (teardown already
     ///   happened).
     ///
-    /// Do not block on other queues in either hook (deadlock risk). `RTCAudioSession.lockForConfiguration`
-    /// is NOT re-entrant.
+    /// `willEnable`, `willStart` and `didDisable` run inside the engine state transition: keep them cheap, do
+    /// not call into the ADM, and do not block on other queues (deadlock risk).
+    /// `RTCAudioSession.lockForConfiguration` is NOT re-entrant.
     ///
     /// Process-wide: applies to every ADM instance (the ADM is rebuilt per call factory), so register once
     /// at module init. Hooks run in registration order. Several consumers may register; each must check
@@ -288,16 +299,27 @@ import WebRTC
     /// - Returns: An opaque token for ``removeEngineHooks(_:)``.
     @objc public static func addEngineHooks(
         willEnable: EngineWillEnableHook?,
-        didDisable: EngineDidDisableHook?
+        willStart: EngineWillStartHook? = nil,
+        didDisable: EngineDidDisableHook?,
+        didCreateModule: ModuleDidCreateHook? = nil
     ) -> NSObject {
         let token = EngineHooksToken()
         engineHooksLock.lock()
-        engineHooks.append(.init(token: token, willEnable: willEnable, didDisable: didDisable))
+        engineHooks.append(
+            .init(
+                token: token,
+                willEnable: willEnable,
+                willStart: willStart,
+                didDisable: didDisable,
+                didCreateModule: didCreateModule
+            )
+        )
         engineHooksLock.unlock()
         return token
     }
 
-    /// Unregisters hooks added with ``addEngineHooks(willEnable:didDisable:)``. Unknown tokens are ignored.
+    /// Unregisters hooks added with ``addEngineHooks(willEnable:willStart:didDisable:didCreateModule:)``.
+    /// Unknown tokens are ignored.
     @objc public static func removeEngineHooks(_ token: NSObject) {
         engineHooksLock.lock()
         engineHooks.removeAll { $0.token === token }
@@ -524,13 +546,17 @@ import WebRTC
     }
 
     /// Mirrors state when the engine is about to start running and delivering
-    /// audio samples.
+    /// audio samples. Runs the process-wide `willStart` hooks first.
     public func audioDeviceModule(
         _ audioDeviceModule: RTCAudioDeviceModule,
         willStartEngine engine: AVAudioEngine,
         isPlayoutEnabled: Bool,
         isRecordingEnabled: Bool
     ) -> Int {
+        for entry in Self.engineHooksSnapshot() {
+            entry.willStart?(isPlayoutEnabled, isRecordingEnabled)
+        }
+
         subject.send(
             .willStartAudioEngine(
                 engine,
