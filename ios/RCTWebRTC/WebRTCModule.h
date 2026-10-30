@@ -32,6 +32,7 @@ static NSString *const kEventAudioDeviceModuleEngineWillRelease = @"audioDeviceM
 static NSString *const kEventAudioDeviceModuleDevicesUpdated = @"audioDeviceModuleDevicesUpdated";
 static NSString *const kEventAudioDeviceModuleAudioProcessingStateUpdated =
     @"audioDeviceModuleAudioProcessingStateUpdated";
+static NSString *const kEventAudioDeviceModuleEngineError = @"audioDeviceModuleEngineError";
 static NSString *const kEventEncryptionManagerEvent = @"encryptionManagerEvent";
 
 @class AudioDeviceModule;
@@ -65,5 +66,8 @@ static NSString *const kEventEncryptionManagerEvent = @"encryptionManagerEvent";
 - (nullable RTCMediaStreamTrack *)trackForId:(NSString *)trackId;
 
 - (nullable AudioDeviceModule *)currentAudioDeviceModuleOrNil;
+
+/// Copy of the recent ADM warning/error log lines (oldest first, at most 50). Thread-safe.
+- (NSArray<NSDictionary *> *)recentEngineErrors;
 
 @end

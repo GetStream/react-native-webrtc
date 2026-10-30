@@ -8,8 +8,15 @@ if (WebRTCModule === null) {
     }`);
 }
 
-import { AudioDeviceModule, AudioEngineMuteMode } from './AudioDeviceModule';
-import { audioDeviceModuleEvents } from './AudioDeviceModuleEvents';
+import {
+    AudioDeviceModule,
+    AudioEngineMuteMode,
+    type AudioEngineStateSnapshot,
+    type RecoverEngineReason,
+    type RecoverEngineResult,
+    type RecoverEngineResultKind,
+} from './AudioDeviceModule';
+import { audioDeviceModuleEvents, type EngineErrorEventData } from './AudioDeviceModuleEvents';
 import CallFactory, {
     type CallFactoryOptions,
 } from './CallFactory';
@@ -87,7 +94,12 @@ export {
     registerGlobals,
     AudioDeviceModule,
     AudioEngineMuteMode,
+    type AudioEngineStateSnapshot,
+    type RecoverEngineReason,
+    type RecoverEngineResult,
+    type RecoverEngineResultKind,
     audioDeviceModuleEvents,
+    type EngineErrorEventData,
     RTCEncryptionManager,
     RTCEncryptionAlgorithm,
     RTCEncryptionTrackType,
