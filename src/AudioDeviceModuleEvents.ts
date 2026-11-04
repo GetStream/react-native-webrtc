@@ -20,10 +20,25 @@ export interface AudioProcessingStateEventData {
   stereoPlayoutEnabled: boolean;
 }
 
+/**
+ * A WebRTC audio device module (`AudioEngineDevice::`) warning/error log line.
+ * Consecutive identical lines are collapsed into one event with `repeat` (total count, when > 1).
+ * `dropped` counts lines suppressed by the rate limit (max 20 events per 10 s) since the previous event.
+ */
+export interface EngineErrorEventData {
+  message: string;
+  severity: 'warning' | 'error';
+  /** Milliseconds since epoch of the first occurrence. */
+  timestamp: number;
+  repeat?: number;
+  dropped?: number;
+}
+
 export type AudioDeviceModuleEventData =
   | SpeechActivityEventData
   | EngineStateEventData
   | AudioProcessingStateEventData
+  | EngineErrorEventData
   | Record<string, never>; // Empty object for events with no data
 
 /**
@@ -143,6 +158,18 @@ class AudioDeviceModuleEventEmitter {
         }
 
         return this.eventEmitter.addListener('audioDeviceModuleEngineWillRelease', listener);
+    }
+
+    /**
+     * Subscribe to audio engine error events (ADM warning/error log lines).
+     * iOS only; never fires on Android.
+     */
+    addEngineErrorListener(listener: (data: EngineErrorEventData) => void) {
+        if (!this.eventEmitter) {
+            throw new Error('AudioDeviceModuleEvents is only available on iOS/macOS');
+        }
+
+        return this.eventEmitter.addListener('audioDeviceModuleEngineError', listener);
     }
 }
 

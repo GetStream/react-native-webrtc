@@ -1,5 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 
+import type { EngineErrorEventData } from './AudioDeviceModuleEvents';
+
 const { WebRTCModule } = NativeModules;
 
 export enum AudioEngineMuteMode {
@@ -7,6 +9,60 @@ export enum AudioEngineMuteMode {
   VoiceProcessing = 0,
   RestartEngine = 1,
   InputMixer = 2,
+}
+
+/**
+ * Snapshot of the iOS audio engine state, read in a single native call.
+ */
+export interface AudioEngineStateSnapshot {
+    /** Playout requested by WebRTC (not proof the engine is running). */
+    isPlaying: boolean;
+    /** Recording requested by WebRTC (not proof the engine is running). */
+    isRecording: boolean;
+    /** Whether the underlying AVAudioEngine is actually running. */
+    isEngineRunning: boolean;
+    isMicrophoneMuted: boolean;
+    isRecordingAlwaysPreparedMode: boolean;
+    isInputAvailable: boolean;
+    isOutputAvailable: boolean;
+    isVoiceProcessingEnabled: boolean;
+    /** Current `AVAudioSession` category, or `null` if unavailable. */
+    sessionCategory: string | null;
+    sessionActive: boolean;
+}
+
+/**
+ * Outcome of {@link AudioDeviceModule.recoverEngineIfNeeded}.
+ * - `healthy`: engine running as needed (with `wantsRecording`: recording and not muted), nothing touched.
+ * - `skipped`: nothing to recover (see {@link RecoverEngineReason}).
+ * - `recovered`: engine restarted and running as needed.
+ * - `outputOnly`: engine running speaker-only (voice-processing failure), mic still dead.
+ * - `failed`: engine still not running.
+ */
+export type RecoverEngineResultKind = 'healthy' | 'skipped' | 'recovered' | 'outputOnly' | 'failed';
+
+/**
+ * Why recovery was skipped.
+ * - `gated`: input/output needed but unavailable (engine availability disabled).
+ * - `noMicPermission`: recording wanted but microphone permission not granted.
+ * - `noCall`: no live call factory.
+ */
+export type RecoverEngineReason = 'gated' | 'noMicPermission' | 'noCall';
+
+export interface RecoverEngineResult {
+    result: RecoverEngineResultKind;
+    reason?: RecoverEngineReason;
+    /** Engine state before recovery; `null` when no call factory is live or on Android. */
+    before: AudioEngineStateSnapshot | null;
+    /** Engine state after recovery; only present when recovery was attempted. */
+    after?: AudioEngineStateSnapshot;
+    /** Native ADM return codes per recovery step (0 = success). */
+    codes: Record<string, number>;
+    /**
+     * ADM warning/error log lines logged during this call (oldest first, uncollapsed);
+     * only present when `result` is `failed` or `outputOnly`.
+     */
+    recentErrors?: EngineErrorEventData[];
 }
 
 /**
@@ -211,7 +267,50 @@ export class AudioDeviceModule {
         return getAudioDeviceModule().audioDeviceModuleSetRecordingAlwaysPreparedMode(enabled);
     }
 
-    // TODO: getEngineAvailability / setEngineAvailability are not supported by the
-    // Stream WebRTC SDK (no RTCAudioEngineAvailability type / setEngineAvailability:
-    // method). Re-add if/when the native API lands.
+    /**
+     * Get a snapshot of the audio engine state in one native call.
+     * `isRecording` / `isPlaying` reflect what WebRTC requested; `isEngineRunning` is the real engine state.
+     * Resolves `null` when no call factory is live (iOS) and always on Android (no native call).
+     */
+    static async getEngineState(): Promise<AudioEngineStateSnapshot | null> {
+        if (Platform.OS === 'android') {
+            return null;
+        }
+
+        return WebRTCModule.audioDeviceModuleGetEngineState();
+    }
+
+    /**
+     * Detect and restart a dead or output-only audio engine.
+     * A dead engine is one WebRTC requested running (`isPlaying` / `isRecording`) but `!isEngineRunning`.
+     * `outputOnly` means the engine runs speaker-only after a voice-processing failure and the mic is still dead.
+     * A healthy engine is not touched. With `wantsRecording`, a running, recording engine whose ADM mic is muted is
+     * unmuted (no restart) and reported as `recovered` with `codes.unmute`.
+     *
+     * Unmutes the ADM microphone when it restarts recording or finds it muted, so pass `wantsRecording` only when the
+     * app wants the mic on. May block the native module queue for ~2 s; callers must limit how often they call this.
+     * Do not change the stereo preference or engine availability concurrently.
+     * Never rejects for ADM errors; on `failed` / `outputOnly` the result carries `recentErrors` (the ADM log lines
+     * that explain why). Android resolves `{ result: 'skipped' }` without a native call.
+     */
+    static async recoverEngineIfNeeded(wantsRecording: boolean): Promise<RecoverEngineResult> {
+        if (Platform.OS === 'android') {
+            return { result: 'skipped', before: null, codes: {} };
+        }
+
+        return WebRTCModule.audioDeviceModuleRecoverEngineIfNeeded(wantsRecording);
+    }
+
+    /**
+     * Recent audio device module warning/error log lines (at most 50, oldest first), the same lines delivered by
+     * `audioDeviceModuleEvents.addEngineErrorListener` but without collapsing or rate limiting.
+     * Android resolves `[]` without a native call.
+     */
+    static async getRecentEngineErrors(): Promise<EngineErrorEventData[]> {
+        if (Platform.OS === 'android') {
+            return [];
+        }
+
+        return WebRTCModule.audioDeviceModuleGetRecentEngineErrors();
+    }
 }
