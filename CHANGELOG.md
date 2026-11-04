@@ -1,3 +1,9 @@
+## [145.4.2](https://github.com/GetStream/react-native-webrtc/compare/v145.4.1...v145.4.2) (2026-11-04)
+
+### Bug Fixes
+
+* **ios:** sync engine hooks, recoverEngineIfNeeded and engine error events for a dead audio engine ([#75](https://github.com/GetStream/react-native-webrtc/issues/75)) ([c9dfe9f](https://github.com/GetStream/react-native-webrtc/commit/c9dfe9f2c477d751c9f8acd745cc0cd855839437))
+
 ## [145.4.1](https://github.com/GetStream/react-native-webrtc/compare/v145.4.0...v145.4.1) (2026-09-28)
 
 ### Bug Fixes
