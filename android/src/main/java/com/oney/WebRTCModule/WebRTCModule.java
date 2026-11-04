@@ -70,6 +70,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     @Nullable
     private RTCCameraPreviewView activeCameraPreview;
 
+    private final Object cameraOwnershipLock = new Object();
+    private int cameraTrackClaims = 0;
+
     public WebRTCModule(ReactApplicationContext reactContext) {
         super(reactContext);
 
@@ -352,18 +355,69 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     void setActiveCameraPreview(RTCCameraPreviewView preview) {
-        this.activeCameraPreview = preview;
+        synchronized (cameraOwnershipLock) {
+            this.activeCameraPreview = preview;
+        }
     }
 
     void clearActiveCameraPreview(RTCCameraPreviewView preview) {
-        if (this.activeCameraPreview == preview) {
-            this.activeCameraPreview = null;
+        synchronized (cameraOwnershipLock) {
+            if (this.activeCameraPreview == preview) {
+                this.activeCameraPreview = null;
+            }
         }
     }
 
     @Nullable
     RTCCameraPreviewView getActiveCameraPreview() {
-        return this.activeCameraPreview;
+        synchronized (cameraOwnershipLock) {
+            return this.activeCameraPreview;
+        }
+    }
+
+    /**
+     * Called by getUserMedia before it acquires the camera for a call track. Returns the registered
+     * lobby preview, if any, so the track adopts its running session. Otherwise records a camera
+     * claim and returns null, and the caller opens a fresh capturer. Checking for a preview and
+     * claiming happen under one lock, so a preview can't register in between and then open a second
+     * camera session alongside the fresh capturer.
+     */
+    @Nullable
+    RTCCameraPreviewView claimCameraForTrack() {
+        synchronized (cameraOwnershipLock) {
+            if (this.activeCameraPreview != null) {
+                return this.activeCameraPreview;
+            }
+            cameraTrackClaims++;
+            return null;
+        }
+    }
+
+    void addCameraClaim() {
+        synchronized (cameraOwnershipLock) {
+            cameraTrackClaims++;
+        }
+    }
+
+    void releaseCameraClaim() {
+        synchronized (cameraOwnershipLock) {
+            if (cameraTrackClaims > 0) {
+                cameraTrackClaims--;
+            } else {
+                Log.w(TAG, "releaseCameraClaim: no claim to release");
+            }
+        }
+    }
+
+    /**
+     * Called by a lobby preview right before it opens the camera. Returns false while a call track
+     * owns the camera; the preview must not start then, since a second session would make Camera2
+     * close the track's session.
+     */
+    boolean canPreviewOpenCamera() {
+        synchronized (cameraOwnershipLock) {
+            return cameraTrackClaims == 0;
+        }
     }
 
     public PeerConnectionObserver getPeerConnectionObserver(int id) {

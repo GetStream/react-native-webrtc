@@ -30,7 +30,10 @@
 
 @end
 
-@implementation WebRTCModule
+@implementation WebRTCModule {
+    NSObject *_cameraOwnershipLock;
+    NSMutableSet<NSString *> *_cameraClaimTrackIds;
+}
 
 + (BOOL)requiresMainQueueSetup {
     return NO;
@@ -64,6 +67,8 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
+        _cameraOwnershipLock = [NSObject new];
+        _cameraClaimTrackIds = [NSMutableSet new];
         WebRTCModuleOptions *options = [WebRTCModuleOptions sharedInstance];
         id<RTCAudioDevice> audioDevice = options.audioDevice;
         id<RTCVideoDecoderFactory> decoderFactory = options.videoDecoderFactory;
@@ -152,12 +157,41 @@
     return [self.factoryRegistry resolveCurrentOrNil].audioDeviceModule;
 }
 
-- (CaptureController *)adoptActiveCameraPreviewForSource:(RTCVideoSource *)source {
-    id<RTCCameraPreviewControl> preview = self.activeCameraPreview;
-    if (preview) {
-        return [preview adoptCaptureForSource:source];
+- (nullable CaptureController *)claimCameraForTrackId:(NSString *)trackId
+                              adoptingPreviewForSource:(RTCVideoSource *)source {
+    id<RTCCameraPreviewControl> preview;
+    // Claiming and reading the registered preview happen under one lock, so a preview can't register
+    // in between and then start a second capturer next to the fresh one.
+    @synchronized(_cameraOwnershipLock) {
+        [_cameraClaimTrackIds addObject:trackId];
+        preview = self.activeCameraPreview;
     }
-    return nil;
+    // Adopt outside the lock: it waits for the preview's capture queue.
+    return preview ? [preview adoptCaptureForSource:source] : nil;
+}
+
+- (void)releaseCameraClaimForTrackId:(NSString *)trackId {
+    @synchronized(_cameraOwnershipLock) {
+        [_cameraClaimTrackIds removeObject:trackId];
+    }
+}
+
+- (BOOL)registerCameraPreviewIfAllowed:(id<RTCCameraPreviewControl>)preview {
+    @synchronized(_cameraOwnershipLock) {
+        if (_cameraClaimTrackIds.count > 0) {
+            return NO;
+        }
+        self.activeCameraPreview = preview;
+        return YES;
+    }
+}
+
+- (void)clearActiveCameraPreview:(id<RTCCameraPreviewControl>)preview {
+    @synchronized(_cameraOwnershipLock) {
+        if (self.activeCameraPreview == preview) {
+            self.activeCameraPreview = nil;
+        }
+    }
 }
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag {

@@ -194,10 +194,13 @@ typedef NS_ENUM(NSInteger, RTCCameraPreviewObjectFit) {
     NSDictionary *constraints = [self currentConstraints];
 
     if (self.isActive && !_capturing) {
+        if (![self.module registerCameraPreviewIfAllowed:self]) {
+            RCTLogInfo(@"[RTCCameraPreview] camera is owned by a call track; not starting the preview");
+            return;
+        }
         // Mark intent synchronously so a follow-up transaction doesn't double-start; do the
         // blocking create + startCapture off the main thread.
         _capturing = YES;
-        self.module.activeCameraPreview = self;
         dispatch_async(_captureQueue, ^{
             if (self->_handedOff || !self->_capturing) {
                 return;
@@ -249,9 +252,7 @@ typedef NS_ENUM(NSInteger, RTCCameraPreviewObjectFit) {
 }
 
 - (void)clearActivePreview {
-    if (self.module.activeCameraPreview == self) {
-        self.module.activeCameraPreview = nil;
-    }
+    [self.module clearActiveCameraPreview:self];
 }
 
 #pragma mark - RTCCameraPreviewControl

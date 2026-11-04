@@ -58,7 +58,14 @@ static NSString *const kEventEncryptionManagerEvent = @"encryptionManagerEvent";
 
 @property(nonatomic, weak) id<RTCCameraPreviewControl> activeCameraPreview;
 
-- (CaptureController *)adoptActiveCameraPreviewForSource:(RTCVideoSource *)source;
+- (nullable CaptureController *)claimCameraForTrackId:(NSString *)trackId
+                              adoptingPreviewForSource:(RTCVideoSource *)source;
+
+- (void)releaseCameraClaimForTrackId:(NSString *)trackId;
+
+- (BOOL)registerCameraPreviewIfAllowed:(id<RTCCameraPreviewControl>)preview;
+
+- (void)clearActiveCameraPreview:(id<RTCCameraPreviewControl>)preview;
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 
