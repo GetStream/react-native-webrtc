@@ -56,7 +56,7 @@ Native code fires events; the JS side fans them out. `src/EventEmitter.ts` subsc
 
 These are the whole point of the fork — never replace them with upstream equivalents:
 
-- **iOS WebRTC binary**: the `StreamWebRTC` pod (from [`stream-video-swift-webrtc`](https://github.com/GetStream/stream-video-swift-webrtc)), pinned in `stream-react-native-webrtc.podspec`. Must **not** become `WebRTC`/`GoogleWebRTC`.
+- **iOS WebRTC binary**: Stream's `WebRTC.xcframework` from [`stream-video-swift-webrtc`](https://github.com/GetStream/stream-video-swift-webrtc) releases. CocoaPods trunk is read-only, so `stream-react-native-webrtc.podspec` downloads it at `pod install` (pinned version + SHA-256) into `third_party/` and vendors it. Must **not** become `WebRTC`/`GoogleWebRTC`/`JitsiWebRTC`.
 - **Android WebRTC binary**: `io.getstream:stream-video-webrtc-android` in `android/build.gradle`. Must **not** become `org.webrtc:google-webrtc`.
 - **Custom audio engine**: `ios/RCTWebRTC/Utils/AudioDeviceModule/` and the TS APIs `src/AudioDeviceModule.ts` / `src/AudioDeviceModuleEvents.ts` (not present upstream).
 - **Custom voice-activity detection**: `android/.../SpeechActivityDetector.java`.

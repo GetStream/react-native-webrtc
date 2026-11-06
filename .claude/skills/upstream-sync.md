@@ -98,8 +98,8 @@ cd examples/GumTestApp/ios && pod install && \
   `rm -rf Pods` pulls files out from under the first.
 - `set -o pipefail`, or check the build's own exit code: `xcodebuild | tail` reports
   *tail's* status, so a failed build looks like exit 0. Grep for `** BUILD SUCCEEDED **`.
-- `pod install` can't satisfy the pinned `StreamWebRTC`? Local spec repo is stale —
-  `pod install --repo-update`. Not a sync problem; CI checks out fresh.
+- `pod install` fails fetching/verifying `WebRTC.xcframework`? The podspec downloads it
+  into `third_party/` (pinned version + SHA-256). Check network; `rm -rf third_party` to force a re-fetch.
 
 ### 6. Format native files
 
@@ -139,7 +139,7 @@ These MUST NOT change during sync:
 | File | Guard |
 |------|-------|
 | `android/build.gradle` | Must keep `io.getstream:stream-video-webrtc-android:*` |
-| `stream-react-native-webrtc.podspec` | Must keep `StreamWebRTC` dependency |
+| `stream-react-native-webrtc.podspec` | Must keep the Stream `WebRTC.xcframework` download (stream-video-swift-webrtc release, pinned SHA-256) + `vendored_frameworks` |
 | `ios/RCTWebRTC/Utils/AudioDeviceModule/` | Fork's custom audio engine — untouched |
 | `SpeechActivityDetector.java` | Fork's custom VAD — untouched |
 | `AudioDeviceModule.ts`, `AudioDeviceModuleEvents.ts` | Fork's custom TS APIs — untouched |
