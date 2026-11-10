@@ -194,7 +194,10 @@
     if (hasRuntimeVideoDevice) {
         // If a lobby camera preview is already running, adopt its capturer by re-pointing it at 
         // this track's video source. Falls back to creating a fresh capturer when there's no preview to adopt.
-        CaptureController *captureController = [self adoptActiveCameraPreviewForSource:videoSource];
+        // Either way this track claims the camera, so no lobby preview starts a second capturer on it
+        // while the track holds it. Released in mediaStreamTrackRelease.
+        CaptureController *captureController = [self claimCameraForTrackId:trackUUID
+                                                  adoptingPreviewForSource:videoSource];
         if ([captureController isKindOfClass:[VideoCaptureController class]]) {
             VideoCaptureController *videoCaptureController = (VideoCaptureController *)captureController;
             videoTrack.captureController = videoCaptureController;
@@ -560,6 +563,8 @@ RCT_EXPORT_METHOD(mediaStreamTrackRelease : (nonnull NSString *)trackID) {
         }
         [track.captureController stopCapture];
         [self.localTracks removeObjectForKey:trackID];
+        // After stopCapture, so a lobby preview can't start while the track's capture is stopping.
+        [self releaseCameraClaimForTrackId:trackID];
     }
 #endif
 }
