@@ -13,8 +13,8 @@ package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 # on every `pod install`. The zip is cached per checksum; a stamp file skips re-extracting.
 # When bumping: update both values. SHA-256 is of the WebRTC.xcframework.zip asset
 # (`shasum -a 256 WebRTC.xcframework.zip`), not the SPM checksum in the release notes.
-webrtc_version = '156.0.2'
-webrtc_sha256  = 'adc58fbe5e8182951f45c1e180c78cd9467a8644cbabd79a08c7a06774beea25'
+webrtc_version = '156.0.4'
+webrtc_sha256  = 'b40dbfa6a523a3bb3c85b29c41034fe68bc8d7bb6b311242a877341f5acacd20'
 
 webrtc_url       = "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/#{webrtc_version}/WebRTC.xcframework.zip"
 webrtc_dir       = File.join(__dir__, 'third_party')
