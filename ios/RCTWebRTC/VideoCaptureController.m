@@ -275,36 +275,29 @@
                       ofObject:(id)object
                         change:(NSDictionary<NSKeyValueChangeKey, id> *)change
                        context:(void *)context {
-    if (@available(iOS 11.1, *)) {
-        if ([object isKindOfClass:[AVCaptureDevice class]] && [keyPath isEqualToString:@"systemPressureState"]) {
-            AVCaptureDevice *device = (AVCaptureDevice *)object;
-            AVCaptureSystemPressureLevel pressureLevel =
-                ((AVCaptureSystemPressureState *)change[NSKeyValueChangeNewKey]).level;
-            if (pressureLevel == AVCaptureSystemPressureLevelSerious ||
-                pressureLevel == AVCaptureSystemPressureLevelCritical) {
-                RCTLogWarn(
-                    @"[VideoCaptureController] Reached elevated system pressure level: %@. Throttling frame rate.",
-                    pressureLevel);
-                [self throttleFrameRateForDevice:device];
-            } else if (pressureLevel == AVCaptureSystemPressureLevelNominal) {
-                RCTLogWarn(@"[VideoCaptureController] Restored normal system pressure level. Resetting frame rate to "
-                           @"default.");
-                [self resetFrameRateForDevice:device];
-            }
+    if ([object isKindOfClass:[AVCaptureDevice class]] && [keyPath isEqualToString:@"systemPressureState"]) {
+        AVCaptureDevice *device = (AVCaptureDevice *)object;
+        AVCaptureSystemPressureLevel pressureLevel =
+            ((AVCaptureSystemPressureState *)change[NSKeyValueChangeNewKey]).level;
+        if (pressureLevel == AVCaptureSystemPressureLevelSerious ||
+            pressureLevel == AVCaptureSystemPressureLevelCritical) {
+            RCTLogWarn(@"[VideoCaptureController] Reached elevated system pressure level: %@. Throttling frame rate.",
+                       pressureLevel);
+            [self throttleFrameRateForDevice:device];
+        } else if (pressureLevel == AVCaptureSystemPressureLevelNominal) {
+            RCTLogWarn(@"[VideoCaptureController] Restored normal system pressure level. Resetting frame rate to "
+                       @"default.");
+            [self resetFrameRateForDevice:device];
         }
     }
 }
 
 - (void)registerSystemPressureStateObserverForDevice:(AVCaptureDevice *)device {
-    if (@available(iOS 11.1, *)) {
-        [device addObserver:self forKeyPath:@"systemPressureState" options:NSKeyValueObservingOptionNew context:nil];
-    }
+    [device addObserver:self forKeyPath:@"systemPressureState" options:NSKeyValueObservingOptionNew context:nil];
 }
 
 - (void)removeObserverForDevice:(AVCaptureDevice *)device {
-    if (@available(iOS 11.1, *)) {
-        [device removeObserver:self forKeyPath:@"systemPressureState"];
-    }
+    [device removeObserver:self forKeyPath:@"systemPressureState"];
 }
 
 #pragma mark Private

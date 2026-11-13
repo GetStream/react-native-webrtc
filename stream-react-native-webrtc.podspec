@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.source              = { :git => 'git@github.com:GetStream/react-native-webrtc.git', :tag => 'release #{s.version}' }
   s.requires_arc        = true
 
-  s.platform            = :ios, '13.0'
+  s.platforms           = { :ios => defined?(min_ios_version_supported) ? min_ios_version_supported : '15.1' }
 
   s.preserve_paths      = 'ios/**/*'
   s.source_files        = 'ios/**/*.{h,m,mm,swift}'
