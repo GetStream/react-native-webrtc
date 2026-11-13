@@ -26,11 +26,19 @@ if (project.extensions.findByName('kotlin') == null) {
 
 rootProject.allprojects {
     repositories {
+        // stream-video-webrtc-android M156+ is published to Stream's Maven repo, not Maven Central.
         maven {
-            name = 'Central Portal Snapshots'
-            url = 'https://central.sonatype.com/repository/maven-snapshots/'
+            name = 'Stream'
+            url = 'https://stream-io-repo.com'
             content {
                 // This efficiently tells Gradle to only look for this specific dependency here
+                includeModule('io.getstream', 'stream-video-webrtc-android')
+            }
+        }
+        maven {
+            name = 'Stream Snapshots'
+            url = 'https://snapshots.stream-io-repo.com'
+            content {
                 includeModule('io.getstream', 'stream-video-webrtc-android')
             }
         }
@@ -90,7 +98,7 @@ def kotlin_version = getExtOrDefault('kotlinVersion', '1.8.10')
 println "Building Stream WebRTC React Native module with Kotlin version: $kotlin_version"
 
 dependencies {
-    api 'io.getstream:stream-video-webrtc-android:145.17.0'
+    api 'io.getstream:stream-video-webrtc-android:156.0.4-SNAPSHOT'
     implementation "com.facebook.react:react-android:+"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "androidx.core:core:1.7.0"
