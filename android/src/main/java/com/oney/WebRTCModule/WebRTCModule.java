@@ -123,6 +123,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         mVideoEncoderFactory = encoderFactory;
         mVideoDecoderFactory = decoderFactory;
 
+        final String networkMonitorFieldTrial =
+                PeerConnectionFactoryProvider.networkMonitorFieldTrialValue(fieldTrials);
+
         factoryRegistry = new PeerConnectionFactoryRegistry((id, bypassVoiceProcessing, stereoInputEnabled) -> {
             PeerConnectionFactoryProvider.BuildOptions buildOptions = new PeerConnectionFactoryProvider.BuildOptions();
             buildOptions.context = getReactApplicationContext();
@@ -132,6 +135,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             buildOptions.bypassVoiceProcessing = bypassVoiceProcessing;
             buildOptions.stereoInputEnabled = stereoInputEnabled;
             buildOptions.speechActivityListener = createSpeechActivityListener();
+            buildOptions.networkMonitorFieldTrial = networkMonitorFieldTrial;
             return PeerConnectionFactoryProvider.build(id, buildOptions);
         });
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);

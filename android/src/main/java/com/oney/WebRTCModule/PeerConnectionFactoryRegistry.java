@@ -134,6 +134,8 @@ class PeerConnectionFactoryRegistry {
             // registry with no call factory present — dump the stack so the caller is identifiable.
             Log.w(TAG, "default factory built with no call factory present. Trigger:",
                     new Throwable("default factory creation trace"));
+        } else {
+            factory.retainNetworkMonitor();
         }
         return factory;
     }
