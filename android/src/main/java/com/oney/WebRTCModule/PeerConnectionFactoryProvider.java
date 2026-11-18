@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.webrtc.AudioProcessingFactory;
+import org.webrtc.NetworkMonitor;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.VideoDecoderFactory;
 import org.webrtc.VideoEncoderFactory;
@@ -53,6 +54,13 @@ class PeerConnectionFactoryProvider {
         /** Receives speaking-while-muted events; the module backs this with the RN event emitter. */
         @Nullable
         SpeechActivityDetector.Listener speechActivityListener;
+        /**
+         * Value of the {@code WebRTC-NetworkMonitorAutoDetect} field trial (empty when unset). Passed
+         * to {@link NetworkMonitor#startMonitoring(Context, String)} so the detector this factory
+         * keeps alive is configured exactly as the one native code would create.
+         */
+        @NonNull
+        String networkMonitorFieldTrial = "";
     }
 
     @NonNull
@@ -66,14 +74,26 @@ class PeerConnectionFactoryProvider {
     final Set<Integer> ownedPcIds = ConcurrentHashMap.newKeySet();
     final Set<String> ownedTrackIds = ConcurrentHashMap.newKeySet();
 
+    @NonNull
+    private final Context applicationContext;
+    @NonNull
+    private final String networkMonitorFieldTrial;
+
     private volatile boolean disposed = false;
 
+    // Whether this factory holds a reference on the process-wide Java NetworkMonitor.
+    private boolean networkMonitorRetained = false;
+
     private PeerConnectionFactoryProvider(@NonNull String id, @NonNull PeerConnectionFactory factory,
-                                          @NonNull AudioDeviceModule adm, boolean bypassVoiceProcessing) {
+                                          @NonNull AudioDeviceModule adm, boolean bypassVoiceProcessing,
+                                          @NonNull Context applicationContext,
+                                          @NonNull String networkMonitorFieldTrial) {
         this.id = id;
         this.factory = factory;
         this.adm = adm;
         this.bypassVoiceProcessing = bypassVoiceProcessing;
+        this.applicationContext = applicationContext;
+        this.networkMonitorFieldTrial = networkMonitorFieldTrial;
     }
 
     @NonNull
@@ -93,7 +113,65 @@ class PeerConnectionFactoryProvider {
 
         PeerConnectionFactory factory = pcFactoryBuilder.createPeerConnectionFactory();
 
-        return new PeerConnectionFactoryProvider(id, factory, adm, options.bypassVoiceProcessing);
+        return new PeerConnectionFactoryProvider(id, factory, adm, options.bypassVoiceProcessing,
+                options.context.getApplicationContext(), options.networkMonitorFieldTrial);
+    }
+
+    /**
+     * Holds a reference on libwebrtc's Java {@link NetworkMonitor} for this factory's lifetime.
+     *
+     * <p>Each PeerConnection's port allocator starts the native network monitor, which takes a
+     * reference on the Java detector; the detector is destroyed when the last one is released. A
+     * freshly created detector reports an empty network list until Android delivers
+     * {@code onAvailable} asynchronously, so a PeerConnection created right after all others were
+     * closed (e.g. during a rejoin) can see "no networks", finish gathering with zero candidates,
+     * and only gather afterwards. Keeping the detector alive for the call keeps its network cache
+     * populated, so every new PeerConnection gets the current networks synchronously.
+     *
+     * <p>Idempotent; released by {@link #dispose()}. Failures are logged and ignored, falling back to
+     * the default libwebrtc behavior.
+     */
+    synchronized void retainNetworkMonitor() {
+        if (disposed || networkMonitorRetained) {
+            return;
+        }
+        try {
+            NetworkMonitor.getInstance().startMonitoring(applicationContext, networkMonitorFieldTrial);
+            networkMonitorRetained = true;
+        } catch (Throwable t) {
+            Log.w(TAG, "retainNetworkMonitor(): startMonitoring failed", t);
+        }
+    }
+
+    private synchronized void releaseNetworkMonitor() {
+        if (!networkMonitorRetained) {
+            return;
+        }
+        networkMonitorRetained = false;
+        try {
+            NetworkMonitor.getInstance().stopMonitoring();
+        } catch (Throwable t) {
+            Log.w(TAG, "releaseNetworkMonitor(): stopMonitoring failed", t);
+        }
+    }
+
+    /**
+     * Extracts the value of the {@code WebRTC-NetworkMonitorAutoDetect} field trial from a field
+     * trials string ({@code "Name1/Value1/Name2/Value2/"}), or returns an empty string when it is
+     * absent. Mirrors the native {@code field_trials.Lookup("WebRTC-NetworkMonitorAutoDetect")}.
+     */
+    @NonNull
+    static String networkMonitorFieldTrialValue(@Nullable String fieldTrials) {
+        if (fieldTrials == null || fieldTrials.isEmpty()) {
+            return "";
+        }
+        String[] parts = fieldTrials.split("/");
+        for (int i = 0; i + 1 < parts.length; i += 2) {
+            if ("WebRTC-NetworkMonitorAutoDetect".equals(parts[i])) {
+                return parts[i + 1];
+            }
+        }
+        return "";
     }
 
     @NonNull
@@ -243,6 +321,8 @@ class PeerConnectionFactoryProvider {
         } catch (Throwable t) {
             Log.w(TAG, "dispose(): adm.release() failed", t);
         }
+
+        releaseNetworkMonitor();
     }
 
     boolean isDisposed() {
