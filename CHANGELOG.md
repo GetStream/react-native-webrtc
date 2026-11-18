@@ -1,3 +1,10 @@
+## [145.4.3](https://github.com/GetStream/react-native-webrtc/compare/v145.4.2...v145.4.3) (2026-11-18)
+
+### Bug Fixes
+
+* **android:** extended lifetime of network monitoring during the call ([#79](https://github.com/GetStream/react-native-webrtc/issues/79)) ([f65a10b](https://github.com/GetStream/react-native-webrtc/commit/f65a10b81033874c50d89d049eee4867eadbae32))
+* stop camera preview starting camera session in case of active track ([#76](https://github.com/GetStream/react-native-webrtc/issues/76)) ([0c8b620](https://github.com/GetStream/react-native-webrtc/commit/0c8b62061ca954b2022f4fea447480af153d912d))
+
 ## [145.4.2](https://github.com/GetStream/react-native-webrtc/compare/v145.4.1...v145.4.2) (2026-11-04)
 
 ### Bug Fixes
