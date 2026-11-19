@@ -170,6 +170,16 @@ public class RTCCameraPreviewView extends FrameLayout {
             return;
         }
 
+        // A call track owns the camera (it opened a fresh capturer before this preview registered).
+        // Opening a second session would make Camera2 close the track's session, so stay blank, and
+        // unregister so later getUserMedia calls don't try to adopt a preview that isn't running.
+        WebRTCModule module = getModule();
+        if (module != null && !module.canPreviewOpenCamera()) {
+            Log.w(TAG, "camera is owned by a call track; not starting the preview");
+            module.clearActiveCameraPreview(this);
+            return;
+        }
+
         JavaOnlyMap constraints = new JavaOnlyMap();
         constraints.putInt("width", captureWidth);
         constraints.putInt("height", captureHeight);

@@ -272,9 +272,12 @@ public class GetUserMediaImpl {
             // If a lobby camera preview is already running, adopt its camera session by routing its
             // frames into this track's source; the camera keeps running. Falls back to creating a
             // fresh capturer when there's no preview to adopt.
-            RTCCameraPreviewView preview = webRTCModule.getActiveCameraPreview();
+            // Either way this track claims the camera, so no lobby preview opens a second camera
+            // session while the track holds it (Camera2 would close the track's session).
+            RTCCameraPreviewView preview = webRTCModule.claimCameraForTrack();
             if (preview != null) {
                 videoTrack = createVideoTrackFromPreview(preview, videoConstraintsMap, factoryProvider);
+                webRTCModule.addCameraClaim();
             }
 
             if (videoTrack == null) {
@@ -282,6 +285,13 @@ public class GetUserMediaImpl {
                         new CameraCaptureController(currentActivity, getCameraEnumerator(), videoConstraintsMap);
 
                 videoTrack = createVideoTrack(cameraCaptureController, factoryProvider);
+            }
+
+            TrackPrivate videoTrackPrivate = videoTrack != null ? tracks.get(videoTrack.id()) : null;
+            if (videoTrackPrivate != null) {
+                videoTrackPrivate.ownsCameraClaim = true;
+            } else {
+                webRTCModule.releaseCameraClaim();
             }
         }
 
@@ -319,7 +329,7 @@ public class GetUserMediaImpl {
     void disposeAllTracks() {
         for (Map.Entry<String, TrackPrivate> entry : tracks.entrySet()) {
             try {
-                entry.getValue().dispose();
+                disposeTrackPrivate(entry.getValue());
                 webRTCModule.factoryRegistry.forgetTrack(entry.getKey());
             } catch (Exception e) {
                 Log.w(TAG, "disposeAllTracks: error disposing " + entry.getKey(), e);
@@ -331,8 +341,24 @@ public class GetUserMediaImpl {
     void disposeTrack(String id) {
         TrackPrivate track = tracks.remove(id);
         if (track != null) {
-            track.dispose();
+            disposeTrackPrivate(track);
             webRTCModule.factoryRegistry.forgetTrack(id);
+        }
+    }
+
+    /**
+     * Disposes the track and then releases its camera claim, if it holds one. The claim is
+     * released after the capture has stopped, so a lobby preview can't open the camera while the
+     * track's session is still closing.
+     */
+    private void disposeTrackPrivate(TrackPrivate track) {
+        try {
+            track.dispose();
+        } finally {
+            if (track.ownsCameraClaim) {
+                track.ownsCameraClaim = false;
+                webRTCModule.releaseCameraClaim();
+            }
         }
     }
 
@@ -762,6 +788,12 @@ public class GetUserMediaImpl {
          * Whether this object has been disposed or not.
          */
         private boolean disposed;
+
+        /**
+         * Whether this track holds a camera claim (see {@link WebRTCModule#claimCameraForTrack()}).
+         * Released by {@link GetUserMediaImpl#disposeTrackPrivate(TrackPrivate)}.
+         */
+        boolean ownsCameraClaim = false;
 
         /**
          * Whether this object is a clone of another object.
