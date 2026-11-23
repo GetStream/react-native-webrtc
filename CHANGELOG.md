@@ -1,3 +1,9 @@
+## [156.0.0](https://github.com/GetStream/react-native-webrtc/compare/v145.4.3...v156.0.0) (2026-11-23)
+
+### Features
+
+* update WebRTC to M156 ([#77](https://github.com/GetStream/react-native-webrtc/issues/77)) ([15f051e](https://github.com/GetStream/react-native-webrtc/commit/15f051e1b6e3dbbcbe66b08e9f22cd2b2f10a1cc))
+
 ## [145.4.3](https://github.com/GetStream/react-native-webrtc/compare/v145.4.2...v145.4.3) (2026-11-18)
 
 ### Bug Fixes
