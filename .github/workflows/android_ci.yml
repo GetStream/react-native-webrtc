@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   android-compile:
-    runs-on: ubuntu-latest
+    runs-on: { group: github-public-amd64 }
     steps:
     - uses: actions/checkout@v6
     - uses: actions/setup-java@v5
