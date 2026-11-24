@@ -23,7 +23,7 @@ concurrency:
 jobs:
   package_release:
     name: Release from "${{ github.ref_name }}" branch
-    runs-on: ubuntu-latest
+    runs-on: { group: github-public-amd64 }
     # GH does not allow limiting branches in workflow_dispatch settings, so guard here.
     if: ${{ inputs.dry_run || github.ref_name == 'master' || github.ref_name == 'beta' || github.ref_name == 'alpha' || startsWith(github.ref_name, 'release') || endsWith(github.ref_name, '.x') }}
     steps:
