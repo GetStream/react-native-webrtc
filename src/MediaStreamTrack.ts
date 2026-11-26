@@ -190,6 +190,17 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
             throw new Error('Track is not remote!');
         }
 
+        this._updateMuted(muted);
+    }
+
+    /**
+     * Sets the muted state and fires the mute / unmute event.
+     * Used for remote tracks, and for local camera tracks when another app
+     * takes the camera away and gives it back (Android).
+     *
+     * @param muted Whether the track should be marked as muted / unmuted.
+     */
+    _updateMuted(muted: boolean) {
         // W3C mediacapture-main "set a track's muted state": if the current
         // muted state already equals the new value, abort — no event fires.
         if (this._muted === muted) {
@@ -304,6 +315,18 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
             this._readyState = 'ended';
 
             this.dispatchEvent(new Event('ended'));
+        });
+
+        // Local tracks use pcId -1. Android sends this for a camera track when
+        // another app takes the camera (muted), and when frames come back
+        // after the camera opens again (unmuted).
+        addListener(this, 'mediaStreamTrackMuteChanged', (ev: any) => {
+            if (ev.pcId !== -1 || ev.trackId !== this.id || this._readyState === 'ended') {
+                return;
+            }
+
+            log.debug(`${this.id} mediaStreamTrackMuteChanged muted=${ev.muted}`);
+            this._updateMuted(ev.muted);
         });
 
         // Add dimension change listener for local video tracks

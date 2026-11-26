@@ -66,24 +66,51 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         @Override
         public void onCameraDisconnected() {
             super.onCameraDisconnected();
-            cameraReopener.waitForCamera();
+            cameraReopener.onCameraTaken();
         }
 
-        // Opening the camera again failed (the other app still has it).
+        // The camera could not be opened, or a fatal camera error happened.
         @Override
         public void onCameraError(String errorDescription) {
             super.onCameraError(errorDescription);
-            cameraReopener.waitForCamera();
+            cameraReopener.onCameraError();
+        }
+
+        @Override
+        public void onFirstFrameAvailable() {
+            super.onFirstFrameAvailable();
+            cameraReopener.onFramesArrived();
         }
     };
 
+    /** Opens the camera again after another app took it. Android 10+ only, see the class doc. */
     private final CameraReopener cameraReopener;
 
     public CameraCaptureController(Context context, CameraEnumerator cameraEnumerator, ReadableMap constraints) {
         super(constraints.getInt("width"), constraints.getInt("height"), constraints.getInt("frameRate"));
 
         this.context = context;
-        this.cameraReopener = new CameraReopener(context, this::startCapture);
+        this.cameraReopener = new CameraReopener(context, new CameraReopener.Listener() {
+            @Override
+            public void reopenCamera() {
+                // The parent's startCapture: the app's wish (cameraWanted) does not change.
+                CameraCaptureController.super.startCapture();
+            }
+
+            @Override
+            public void onPausedChanged(boolean paused) {
+                if (capturerEventsListener != null) {
+                    capturerEventsListener.onCapturerMuteChanged(paused);
+                }
+            }
+
+            @Override
+            public void onGaveUp() {
+                if (capturerEventsListener != null) {
+                    capturerEventsListener.onCapturerEnded();
+                }
+            }
+        });
         this.cameraEnumerator = cameraEnumerator;
         this.constraints = constraints;
 
@@ -95,6 +122,25 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
     @Override
     public String getDeviceId() {
         return currentDeviceId;
+    }
+
+    @Override
+    public void startCapture() {
+        cameraReopener.setCameraWanted(true);
+        super.startCapture();
+    }
+
+    @Override
+    public boolean stopCapture() {
+        // First, so a reopen that is waiting can't turn the camera back on.
+        cameraReopener.setCameraWanted(false);
+        return super.stopCapture();
+    }
+
+    @Override
+    public void dispose() {
+        cameraReopener.setCameraWanted(false);
+        super.dispose();
     }
 
     private int findCameraIndex(String cameraName) {
