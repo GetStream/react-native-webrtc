@@ -15,6 +15,7 @@ import com.facebook.react.bridge.WritableMap;
 import org.webrtc.Camera1Capturer;
 import org.webrtc.Camera1Helper;
 import org.webrtc.Camera2Capturer;
+import org.webrtc.Camera2Enumerator;
 import org.webrtc.Camera2Helper;
 import org.webrtc.CameraEnumerator;
 import org.webrtc.CameraVideoCapturer;
@@ -60,6 +61,7 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
             int cameraIndex = findCameraIndex(cameraName);
             updateActualSize(cameraIndex, cameraName, videoCapturer);
             CameraCaptureController.this.currentDeviceId = cameraIndex == -1 ? null : String.valueOf(cameraIndex);
+            CameraCaptureController.this.currentCameraName = cameraName;
         }
 
         // Android took our camera (another app opened a camera).
@@ -83,8 +85,12 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         }
     };
 
-    /** Opens the camera again after another app took it. Android 10+ only, see the class doc. */
+    /** Opens the camera again after another app took it. See the class doc for which Android versions. */
     private final CameraReopener cameraReopener;
+
+    /** Name of the camera that was opened last. For Camera2 this is the CameraManager id. */
+    @Nullable
+    private volatile String currentCameraName;
 
     public CameraCaptureController(Context context, CameraEnumerator cameraEnumerator, ReadableMap constraints) {
         super(constraints.getInt("width"), constraints.getInt("height"), constraints.getInt("frameRate"));
@@ -109,6 +115,16 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
                 if (capturerEventsListener != null) {
                     capturerEventsListener.onCapturerEnded();
                 }
+            }
+
+            @Nullable
+            @Override
+            public String currentCameraId() {
+                // Camera2: the camera name is the CameraManager id. Camera1: the camera index is
+                // the same number as the CameraManager id.
+                return CameraCaptureController.this.cameraEnumerator instanceof Camera2Enumerator
+                        ? currentCameraName
+                        : currentDeviceId;
             }
         });
         this.cameraEnumerator = cameraEnumerator;

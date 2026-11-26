@@ -5,6 +5,12 @@ import android.hardware.camera2.CameraManager;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Opens the camera again after another app took it away.
  *
@@ -12,21 +18,29 @@ import android.os.Looper;
  * ever opening the camera again. This class then:
  * <ol>
  *   <li>tells the listener the video is paused,</li>
- *   <li>waits for Android's "try the camera again" signal,</li>
- *   <li>opens the camera again (same capturer, so the same track continues),</li>
+ *   <li>listens to Android until a frame arrives again, and on each "try again" signal opens the
+ *       camera again (same capturer, so the same track continues),</li>
  *   <li>tells the listener the video is back when the first frame arrives.</li>
  * </ol>
  * If opening fails because the other app still has the camera, it waits for the next signal.
  * After {@link #MAX_FAILED_REOPENS} failed tries, or on a camera error that is not about another
  * app, it gives up and the listener ends the track.
  *
- * <p><b>Android 10 (API 29) and newer only.</b> The "try again" signal is
- * {@link CameraManager.AvailabilityCallback#onCameraAccessPrioritiesChanged()}, which does not
- * exist before Android 10. On older versions the signal never comes: the video stays paused until
- * the app turns the camera off and on.
+ * <p>"Try again" signals:
+ * <ul>
+ *   <li>{@link CameraManager.AvailabilityCallback#onCameraAccessPrioritiesChanged()}, Android 10
+ *       (API 29) and newer. Needed when the other app uses a camera id we can't see (the Samsung
+ *       Camera app does), so our camera never looks busy.</li>
+ *   <li>Our camera id changing from in use to free
+ *       ({@link CameraManager.AvailabilityCallback#onCameraAvailable(String)}), all versions.
+ *       Works when the other app used the same camera id.</li>
+ * </ul>
+ * On Android 9 and older only the second signal exists. If the other app used a different camera
+ * id there, the video stays paused until the app turns the camera off and on.
  *
  * <p>Threads: every method can be called from any thread. The state is only read and written on
- * the main thread, except {@link #cameraWanted}, which is guarded by {@link #lock}.
+ * the main thread, except {@link #cameraWanted} and {@link #generation}, which are guarded by
+ * {@link #lock}.
  */
 class CameraReopener {
 
@@ -40,23 +54,27 @@ class CameraReopener {
 
         /** We could not get the camera back. End the track, so the app shows the camera as off. */
         void onGaveUp();
+
+        /** The CameraManager id of the camera in use, or null if unknown. */
+        @Nullable
+        String currentCameraId();
     }
 
     private enum State {
-        /** The camera works, or the app turned it off. */
+        /** The camera works, or the app turned it off. Not listening to Android. */
         IDLE,
-        /** The camera was taken. We are registered with Android and wait for the signal. */
+        /** The camera was taken. Listening to Android and waiting for a "try again" signal. */
         WAITING_FOR_SIGNAL,
-        /** The signal came. The camera opens after {@link #REOPEN_DELAY_MS}. */
+        /** A signal came. The camera opens after {@link #REOPEN_DELAY_MS}. */
         REOPEN_SCHEDULED,
         /** We called reopenCamera() and wait for the first frame or a failure. */
         REOPENING
     }
 
     /** Gives the other app time to finish closing the camera. */
-    private static final long REOPEN_DELAY_MS = 500;
+    static final long REOPEN_DELAY_MS = 500;
 
-    private static final int MAX_FAILED_REOPENS = 3;
+    static final int MAX_FAILED_REOPENS = 3;
 
     private final CameraManager cameraManager;
     private final Listener listener;
@@ -67,18 +85,44 @@ class CameraReopener {
     private State state = State.IDLE;
     private int failedReopens = 0;
     private boolean paused = false;
+    /** A signal came while we were opening the camera. If that try fails, try again. */
+    private boolean signalWhileReopening = false;
+    /** The generation the current recovery belongs to. */
+    private int episodeGeneration = 0;
+    @Nullable
+    private String episodeCameraId;
+    /** Last known state of each camera id while listening: true = free, false = in use. */
+    private final Map<String, Boolean> knownAvailability = new HashMap<>();
+    private boolean listening = false;
 
     private final Object lock = new Object();
 
     /** True while the app wants the camera on (between startCapture and stopCapture). */
-    private volatile boolean cameraWanted = false;
+    private boolean cameraWanted = false;
 
-    private final CameraManager.AvailabilityCallback retrySignal = new CameraManager.AvailabilityCallback() {
-        // No @Override, so this compiles with a compileSdkVersion below 29.
-        public void onCameraAccessPrioritiesChanged() {
-            onRetrySignal();
-        }
-    };
+    /**
+     * Goes up every time the app turns the camera on or off. Work that was queued for an older
+     * generation (an error from a session that the app already stopped) is dropped.
+     */
+    private int generation = 0;
+
+    private final CameraManager.AvailabilityCallback availabilityCallback =
+            new CameraManager.AvailabilityCallback() {
+                @Override
+                public void onCameraAvailable(@NonNull String cameraId) {
+                    onAvailabilityChanged(cameraId, true);
+                }
+
+                @Override
+                public void onCameraUnavailable(@NonNull String cameraId) {
+                    onAvailabilityChanged(cameraId, false);
+                }
+
+                // Android 10+. No @Override, so this compiles with a compileSdkVersion below 29.
+                public void onCameraAccessPrioritiesChanged() {
+                    onRetrySignal();
+                }
+            };
 
     CameraReopener(Context context, Listener listener) {
         this.cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
@@ -86,35 +130,36 @@ class CameraReopener {
     }
 
     /**
-     * The app turned the camera on (true) or off (false). When it is off, we stop waiting and
-     * never open the camera again by ourselves.
+     * The app turned the camera on (true) or off (false). Ends any recovery that belongs to an
+     * earlier generation. When the camera is off, we never open it again by ourselves.
      */
     void setCameraWanted(boolean wanted) {
+        final int newGeneration;
         synchronized (lock) {
             cameraWanted = wanted;
+            generation++;
+            newGeneration = generation;
         }
-        if (!wanted) {
-            mainHandler.post(() -> {
-                stopListening();
-                mainHandler.removeCallbacks(reopenNowRunnable);
-                state = State.IDLE;
-                failedReopens = 0;
-                // Keep "paused": if the app turns the camera on again, the first frame
-                // sends "back".
-            });
-        }
+        mainHandler.post(() -> {
+            // A recovery started for this generation or a newer one is not ours to end.
+            if (state != State.IDLE && episodeGeneration >= newGeneration) {
+                return;
+            }
+            endEpisode();
+            // Keep "paused": if the app turns the camera on again, the first frame sends "back".
+        });
     }
 
     /** Android closed our camera, usually because another app opened a camera. */
     void onCameraTaken() {
+        final int eventGeneration = currentGeneration();
         mainHandler.post(() -> {
-            if (!cameraWanted) {
+            if (!isCurrent(eventGeneration)) {
                 return;
             }
             switch (state) {
                 case IDLE:
-                    setPaused(true);
-                    startListening();
+                    startEpisode(eventGeneration);
                     break;
                 case REOPENING:
                     // Our try failed: the other app still has the camera.
@@ -130,8 +175,9 @@ class CameraReopener {
 
     /** The camera could not be opened, or a fatal camera error happened. */
     void onCameraError() {
+        final int eventGeneration = currentGeneration();
         mainHandler.post(() -> {
-            if (!cameraWanted) {
+            if (!isCurrent(eventGeneration)) {
                 return;
             }
             switch (state) {
@@ -154,21 +200,64 @@ class CameraReopener {
 
     /** The first frame arrived from a newly opened camera. */
     void onFramesArrived() {
+        final int eventGeneration = currentGeneration();
         mainHandler.post(() -> {
-            state = State.IDLE;
-            failedReopens = 0;
+            if (!isCurrent(eventGeneration)) {
+                return;
+            }
+            endEpisode();
             setPaused(false);
         });
     }
 
-    private void onRetrySignal() {
-        // Android may send several signals in a row: only the first one counts.
-        if (state != State.WAITING_FOR_SIGNAL) {
+    private void startEpisode(int eventGeneration) {
+        episodeGeneration = eventGeneration;
+        episodeCameraId = listener.currentCameraId();
+        failedReopens = 0;
+        signalWhileReopening = false;
+        setPaused(true);
+        state = State.WAITING_FOR_SIGNAL;
+        startListening();
+    }
+
+    /** Stops listening and cancels a scheduled reopen. */
+    private void endEpisode() {
+        stopListening();
+        mainHandler.removeCallbacks(reopenNowRunnable);
+        state = State.IDLE;
+        failedReopens = 0;
+        signalWhileReopening = false;
+        episodeCameraId = null;
+    }
+
+    private void onAvailabilityChanged(String cameraId, boolean available) {
+        if (!listening) {
             return;
         }
-        stopListening();
-        state = State.REOPEN_SCHEDULED;
-        mainHandler.postDelayed(reopenNowRunnable, REOPEN_DELAY_MS);
+        Boolean wasAvailable = knownAvailability.put(cameraId, available);
+        // Android reports the current state of every camera right after we register, so only a
+        // change from "in use" to "free" counts as a signal. Other cameras don't matter.
+        if (available && Boolean.FALSE.equals(wasAvailable) && cameraId.equals(episodeCameraId)) {
+            onRetrySignal();
+        }
+    }
+
+    private void onRetrySignal() {
+        switch (state) {
+            case WAITING_FOR_SIGNAL:
+                state = State.REOPEN_SCHEDULED;
+                mainHandler.postDelayed(reopenNowRunnable, REOPEN_DELAY_MS);
+                break;
+            case REOPENING:
+                // The other app may have released the camera after our try started. If the try
+                // fails, try again instead of waiting for a signal that already came.
+                signalWhileReopening = true;
+                break;
+            case REOPEN_SCHEDULED:
+                // The scheduled try starts after this signal, so it already covers it.
+            case IDLE:
+                break;
+        }
     }
 
     private void reopenNow() {
@@ -178,11 +267,12 @@ class CameraReopener {
         // Check and open while holding the lock: a setCameraWanted(false) from another thread
         // either runs before (we don't open) or after (its stopCapture closes what we opened).
         synchronized (lock) {
-            if (!cameraWanted) {
-                state = State.IDLE;
+            if (!cameraWanted || generation != episodeGeneration) {
+                endEpisode();
                 return;
             }
             state = State.REOPENING;
+            signalWhileReopening = false;
             listener.reopenCamera();
         }
     }
@@ -193,25 +283,35 @@ class CameraReopener {
             giveUp();
             return;
         }
-        startListening();
+        state = State.WAITING_FOR_SIGNAL;
+        if (signalWhileReopening) {
+            signalWhileReopening = false;
+            onRetrySignal();
+        }
     }
 
     private void giveUp() {
-        stopListening();
-        mainHandler.removeCallbacks(reopenNowRunnable);
-        state = State.IDLE;
-        failedReopens = 0;
+        endEpisode();
         paused = false;
         listener.onGaveUp();
     }
 
     private void startListening() {
-        state = State.WAITING_FOR_SIGNAL;
-        cameraManager.registerAvailabilityCallback(retrySignal, mainHandler);
+        if (listening) {
+            return;
+        }
+        listening = true;
+        knownAvailability.clear();
+        cameraManager.registerAvailabilityCallback(availabilityCallback, mainHandler);
     }
 
     private void stopListening() {
-        cameraManager.unregisterAvailabilityCallback(retrySignal);
+        if (!listening) {
+            return;
+        }
+        listening = false;
+        knownAvailability.clear();
+        cameraManager.unregisterAvailabilityCallback(availabilityCallback);
     }
 
     private void setPaused(boolean newPaused) {
@@ -220,5 +320,18 @@ class CameraReopener {
         }
         paused = newPaused;
         listener.onPausedChanged(newPaused);
+    }
+
+    private int currentGeneration() {
+        synchronized (lock) {
+            return generation;
+        }
+    }
+
+    /** True if the app still wants the camera and nothing turned it off or on since the event. */
+    private boolean isCurrent(int eventGeneration) {
+        synchronized (lock) {
+            return cameraWanted && generation == eventGeneration;
+        }
     }
 }
