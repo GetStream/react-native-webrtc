@@ -8,12 +8,16 @@
 #      Expected: our camera is disconnected.
 #   3. Go back to GumTestApp.
 #      Expected: the camera opens again and frames arrive. The track is not ended.
-#   4. Expected: JS was told the video paused ("mute event") and came back ("unmute event").
+#   4. Expected: the JS track (GumTestApp's own listeners, App.js) got "mute" and then
+#      "unmute", it is the same track as before, and it is still live.
+#   5. Tap "Flip". Expected: the camera switches and frames arrive
+#      (before the fix this failed with "switchCamera: camera is not running").
 #
 # Before the fix (CameraReopener), step 3 fails: libwebrtc stops the camera when Android
 # takes it, and nothing opens it again, so no frame arrives after going back.
 #
-# This checks the logs the fork writes (logcat), so it needs a debug build.
+# This checks the device log (logcat): native lines from the fork and JS lines that
+# GumTestApp writes with console.log, so it needs a debug build.
 #
 # Before running:
 #   - Connect one Android 10+ device (or set ANDROID_SERIAL to pick one).
@@ -87,6 +91,20 @@ expect_log() {
     local pattern="$1" since="$2" description="$3"
     if ! logs_since "$since" | grep -qE "$pattern"; then
         fail "$description (no log line matching '$pattern')"
+    fi
+    pass "$description"
+}
+
+# Fails unless the first line matching <first> comes before the first line matching <second>.
+# Usage: expect_first_before <first> <second> <since> <description>
+expect_first_before() {
+    local first="$1" second="$2" since="$3" description="$4"
+    local lines first_line second_line
+    lines="$(logs_since "$since")"
+    first_line="$(echo "$lines" | grep -nE "$first" | head -1 | cut -d: -f1)"
+    second_line="$(echo "$lines" | grep -nE "$second" | head -1 | cut -d: -f1)"
+    if [ -z "$first_line" ] || [ -z "$second_line" ] || [ "$first_line" -ge "$second_line" ]; then
+        fail "$description"
     fi
     pass "$description"
 }
@@ -211,6 +229,9 @@ TEST_START_TIME="$(device_time)"
 adb shell am start -n "$APP_ID/.MainActivity" >/dev/null
 tap_until_log "Start" "getUserMedia\(video\)" "app asked for the camera"
 wait_for_log "CameraEventsHandler.onFirstFrameAvailable" "$TEST_START_TIME" "camera is sending frames"
+wait_for_log "GumTestApp track started id=" "$TEST_START_TIME" "JS has the video track"
+TRACK_ID="$(logs_since "$TEST_START_TIME" | grep -oE "GumTestApp track started id=[^ ]+" | tail -1 | sed 's/.*id=//')"
+echo "   track id: $TRACK_ID"
 
 step "2. Open the system Camera app for ${OTHER_APP_SECONDS}s"
 TAKEN_TIME="$(device_time)"
@@ -223,11 +244,24 @@ BACK_TIME="$(device_time)"
 adb shell am start -n "$APP_ID/.MainActivity" >/dev/null
 # The bug: before the fix, the camera never opens again, so this check fails.
 wait_for_log "CameraEventsHandler.onFirstFrameAvailable" "$BACK_TIME" "camera opened again and sends frames"
-expect_no_log "ended event trackId" "$TAKEN_TIME" "track was not ended"
+expect_no_log ": ended event trackId" "$TAKEN_TIME" "native side did not end the track"
 
-step "4. Check JS was told about the pause"
-expect_log "mute event trackId" "$TAKEN_TIME" "track was paused while the Camera app had the camera (mute event)"
-expect_log "unmute event trackId" "$BACK_TIME" "track was resumed after going back (unmute event)"
+step "4. Check what the JS track saw"
+# The JS lines come from GumTestApp's own listeners (App.js), so they prove the events
+# reached JavaScript, not only that the native side sent them.
+JS_MUTE="GumTestApp track mute id=$TRACK_ID "
+JS_UNMUTE="GumTestApp track unmute id=$TRACK_ID muted=false readyState=live"
+expect_log "$JS_MUTE" "$TAKEN_TIME" "JS track got \"mute\" while the Camera app had the camera"
+expect_log "$JS_UNMUTE" "$TAKEN_TIME" "the same JS track got \"unmute\" and is still live"
+expect_first_before "$JS_MUTE" "$JS_UNMUTE" "$TAKEN_TIME" "\"mute\" came before \"unmute\""
+expect_no_log "GumTestApp track ended" "$TAKEN_TIME" "JS track was not ended"
+
+step "5. Flip the camera"
+FLIP_TIME="$(device_time)"
+tap_until_log "Flip" "CameraCapturer: switchCamera" "app asked to flip the camera"
+wait_for_log "CameraCapturer: switchCamera done" "$FLIP_TIME" "camera switched"
+wait_for_log "CameraEventsHandler.onFirstFrameAvailable" "$FLIP_TIME" "flipped camera sends frames"
+expect_no_log "camera is not running" "$FLIP_TIME" "no \"camera is not running\" error"
 
 echo ""
 echo "PASSED"
