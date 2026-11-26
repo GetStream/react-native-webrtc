@@ -61,12 +61,29 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
             updateActualSize(cameraIndex, cameraName, videoCapturer);
             CameraCaptureController.this.currentDeviceId = cameraIndex == -1 ? null : String.valueOf(cameraIndex);
         }
+
+        // Android took our camera (another app opened a camera).
+        @Override
+        public void onCameraDisconnected() {
+            super.onCameraDisconnected();
+            cameraReopener.waitForCamera();
+        }
+
+        // Opening the camera again failed (the other app still has it).
+        @Override
+        public void onCameraError(String errorDescription) {
+            super.onCameraError(errorDescription);
+            cameraReopener.waitForCamera();
+        }
     };
+
+    private final CameraReopener cameraReopener;
 
     public CameraCaptureController(Context context, CameraEnumerator cameraEnumerator, ReadableMap constraints) {
         super(constraints.getInt("width"), constraints.getInt("height"), constraints.getInt("frameRate"));
 
         this.context = context;
+        this.cameraReopener = new CameraReopener(context, this::startCapture);
         this.cameraEnumerator = cameraEnumerator;
         this.constraints = constraints;
 
