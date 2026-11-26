@@ -34,6 +34,8 @@ import java.util.Map;
  *   <li>Our camera id changing from in use to free
  *       ({@link CameraManager.AvailabilityCallback#onCameraAvailable(String)}), all versions.
  *       Works when the other app used the same camera id.</li>
+ *   <li>The first report after we start listening saying our camera is already free (the other
+ *       app released it before we listened). This gives one try per recovery, not more.</li>
  * </ul>
  * On Android 9 and older only the second signal exists. If the other app used a different camera
  * id there, the video stays paused until the app turns the camera off and on.
@@ -93,6 +95,8 @@ class CameraReopener {
     private String episodeCameraId;
     /** Last known state of each camera id while listening: true = free, false = in use. */
     private final Map<String, Boolean> knownAvailability = new HashMap<>();
+    /** We already tried once because the first report said our camera was free. */
+    private boolean triedOnFirstReport = false;
     private boolean listening = false;
 
     private final Object lock = new Object();
@@ -215,6 +219,7 @@ class CameraReopener {
         episodeCameraId = listener.currentCameraId();
         failedReopens = 0;
         signalWhileReopening = false;
+        triedOnFirstReport = false;
         setPaused(true);
         state = State.WAITING_FOR_SIGNAL;
         startListening();
@@ -227,6 +232,7 @@ class CameraReopener {
         state = State.IDLE;
         failedReopens = 0;
         signalWhileReopening = false;
+        triedOnFirstReport = false;
         episodeCameraId = null;
     }
 
@@ -235,9 +241,19 @@ class CameraReopener {
             return;
         }
         Boolean wasAvailable = knownAvailability.put(cameraId, available);
-        // Android reports the current state of every camera right after we register, so only a
-        // change from "in use" to "free" counts as a signal. Other cameras don't matter.
-        if (available && Boolean.FALSE.equals(wasAvailable) && cameraId.equals(episodeCameraId)) {
+        if (!available || !cameraId.equals(episodeCameraId)) {
+            // Only our camera becoming free matters.
+            return;
+        }
+        if (Boolean.FALSE.equals(wasAvailable)) {
+            // Our camera changed from in use to free.
+            onRetrySignal();
+        } else if (wasAvailable == null && !triedOnFirstReport) {
+            // Android reports how every camera is right after we register. Our camera may already
+            // be free (the other app released it before we started listening), so try once. On
+            // Samsung this try can fail while the Camera app holds a private camera id; then we
+            // wait for a real signal. A repeated "free" report never causes another try.
+            triedOnFirstReport = true;
             onRetrySignal();
         }
     }

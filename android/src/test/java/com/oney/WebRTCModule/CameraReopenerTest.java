@@ -160,17 +160,53 @@ public class CameraReopenerTest {
         assertEquals(1, controller.reopens());
     }
 
+    // ---- Follow-up review: our camera is already free when we start listening ----
+
     @Test
-    public void ignoresTheFirstReportThatOurCameraIsFree() {
+    public void triesOnceWhenOurCameraIsAlreadyFreeWhenListeningStarts() {
         cameraTaken();
         CameraManager.AvailabilityCallback android = registeredCallback();
 
-        // Right after registering, Android reports how every camera is now. On Samsung our
-        // camera looks free while the Camera app uses a private camera id, and opening it fails.
+        // The other app released the camera before we started listening, and no priority
+        // signal will come. The only thing Android sends is how our camera is now: free.
         android.onCameraAvailable(OUR_CAMERA);
         passTime(CameraReopener.REOPEN_DELAY_MS);
 
-        assertEquals(0, controller.reopens());
+        assertEquals(1, controller.reopens());
+    }
+
+    @Test
+    public void opensTheCameraOnALaterSignalWhenTheTryFromTheFirstReportFails() {
+        cameraTaken();
+        CameraManager.AvailabilityCallback android = registeredCallback();
+
+        // Samsung: our camera looks free while the Camera app holds a private camera id, so
+        // the try from the first report fails...
+        android.onCameraAvailable(OUR_CAMERA);
+        passTime(CameraReopener.REOPEN_DELAY_MS);
+        openFailed();
+
+        // ...and the Camera app closing later still brings the camera back.
+        prioritiesChanged();
+        passTime(CameraReopener.REOPEN_DELAY_MS);
+
+        assertEquals(Arrays.asList("paused", "reopen", "reopen"), controller.calls);
+    }
+
+    @Test
+    public void doesNotTryAgainWhenOurCameraIsReportedFreeAgainWithoutChanging() {
+        cameraTaken();
+        CameraManager.AvailabilityCallback android = registeredCallback();
+        android.onCameraAvailable(OUR_CAMERA);
+        passTime(CameraReopener.REOPEN_DELAY_MS);
+        openFailed();
+
+        // Still free, nothing changed: not a reason to try again.
+        android.onCameraAvailable(OUR_CAMERA);
+        android.onCameraAvailable(OUR_CAMERA);
+        passTime(CameraReopener.REOPEN_DELAY_MS);
+
+        assertEquals(1, controller.reopens());
     }
 
     @Test
