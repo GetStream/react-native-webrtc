@@ -48,6 +48,73 @@ import java.util.Map;
  * try. A priority change means a try may work, not that the camera is free. Recovery succeeds when
  * the first frame arrives, not when {@code reopenCamera()} returns.
  *
+ * <h2>Flow diagram (current code)</h2>
+ *
+ * <p>( ) = start or end, [ ] = step, &lt; &gt; = yes/no question, (W) and (S) = jump targets.
+ *
+ * <pre>{@code
+ * ( START: the camera is running and the app requests capture )
+ *                     |
+ *                     v
+ * [ onCameraDisconnected(): the capturer reports Android closed our camera ]
+ *                     |
+ *                     v
+ * < still requested, same generation? > --no--> ( END: drop the event )
+ *                     | yes
+ *                     v
+ * [ startRecovery(): Listener.onCaptureInterruptedChanged(true)  (track "mute"),
+ *   startListening()  (register with CameraManager) ]
+ *                     |
+ *                     v
+ * (W) [ WAITING_FOR_SIGNAL ]
+ *                     |
+ *                     v
+ * < Android signal: priorities changed, or our camera   > --no--> keep waiting in (W)
+ * < in use -> free, or the first report says it is free >
+ * < (the first report counts once per recovery)         >
+ *                     | yes
+ *                     v
+ * (S) [ scheduleReopen(): REOPEN_SCHEDULED. More signals now join this try ]
+ *                     | after REOPEN_DELAY_MS (500 ms)
+ *                     v
+ * < reopenNow(), under the lock:      > --no--> [ endRecovery() ] --> ( END: the app stopped capture )
+ * < still requested, same generation? >
+ *                     | yes
+ *                     v
+ * [ REOPENING: Listener.reopenCamera() on the same capturer.
+ *   A signal now sets retrySignalPending ]
+ *                     |
+ *                     v
+ * < first frame arrived? > --yes--> [ onFramesArrived(): endRecovery(),
+ *                     |               Listener.onCaptureInterruptedChanged(false)  (track "unmute") ]
+ *                     |                                     |
+ *                     |                                     v
+ *                     |                  ( END: video is back on the same track )
+ *                     | no: onCameraError() or onCameraDisconnected()
+ *                     v
+ * [ onReopenFailed(): failedReopens + 1 ]
+ *                     |
+ *                     v
+ * < failedReopens == MAX_FAILED_REOPENS (3)? > --yes--> [ failRecovery(): Listener.onRecoveryFailed() ]
+ *                     | no                                              |
+ *                     v                                                 v
+ * < retrySignalPending? > --yes--> go to (S)        ( END: track ended, the app shows the camera off )
+ *                     | no
+ *                     v
+ *                 go to (W)
+ *
+ * Two more ways out:
+ *
+ * [ setCaptureRequested(false), at any point: the app stops capture ]
+ *     --> new generation, endRecovery() --> ( END: we never reopen; older queued work is dropped )
+ *
+ * [ onCameraError() while the camera was working (IDLE) ]
+ *     --> failRecovery(): Listener.onRecoveryFailed() --> ( END: track ended, camera shown off )
+ * }</pre>
+ *
+ * <p>Not drawn: {@code onCameraDisconnected()} and {@code onCameraError()} are ignored while we wait
+ * for a signal or a try is scheduled, and a signal is ignored when no recovery runs.
+ *
  * <h2>The same path with overlapping events and cancelling</h2>
  *
  * <pre>{@code
