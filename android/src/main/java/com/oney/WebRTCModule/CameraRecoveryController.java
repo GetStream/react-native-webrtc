@@ -14,151 +14,155 @@ import java.util.Map;
 /**
  * Gets the camera back after Android disconnected it while the app still requests capture,
  * usually because another app opened a camera. libwebrtc stops capturing in that case and never
- * opens the camera again by itself. We reopen it on the same capturer, so the same track continues.
+ * opens the camera again by itself. We reopen it on the same capturer, so the same track
+ * continues.
  *
- * <h2>Normal path (safeguards left out of this view)</h2>
+ * <p>Three views of the same recovery follow. Each answers a different question:
+ * <ol>
+ *   <li>Normal path: which methods run, and in what order?</li>
+ *   <li>Flow diagram: how does recovery move between states and outcomes?</li>
+ *   <li>Race handling: what happens when callbacks and the app's own actions overlap?</li>
+ * </ol>
  *
- * <p>Read the successful recovery in this order. Android's callbacks come later and on their own;
- * the arrows show the order of the lifecycle, not one call stack.
+ * <h2>1. Normal path</h2>
+ *
+ * <p>The successful recovery only. Each "Later" starts on its own; this is not one call stack.
  *
  * <pre>{@code
- * onCameraDisconnected()                    // the capturer reports Android closed our camera
- *   -> startRecovery()
- *        -> setCaptureInterrupted(true)     -> Listener.onCaptureInterruptedChanged(true)  // track "mute"
- *        -> startListening()                -> CameraManager.registerAvailabilityCallback()
+ * The capturer reports the disconnect:
+ *   onCameraDisconnected()
+ *     -> startRecovery()
+ *          -> setCaptureInterrupted(true)   [track: mute]
+ *          -> startListening()              [register with CameraManager]
  *
- * Later, Android calls one of:
- *   onCameraAvailable(cameraId)             -> onAvailabilityChanged(cameraId, true) -> onRetrySignal()
- *   onCameraAccessPrioritiesChanged()                                                -> onRetrySignal()
+ * Later, Android reports a change:
+ *   onAvailabilityChanged(cameraId, true)   [our camera is free]
+ *     -> onRetrySignal()
+ *   or onCameraAccessPrioritiesChanged()    [API 29+]
+ *     -> onRetrySignal()
+ *   onRetrySignal()
+ *     -> scheduleReopen()                   [state: REOPEN_SCHEDULED]
  *
- * onRetrySignal()
- *   -> scheduleReopen()                     // runs reopenNow() after REOPEN_DELAY_MS
- *
- * reopenNow()
- *   -> Listener.reopenCamera()              // same capturer, same track
+ * Later, after REOPEN_DELAY_MS (500 ms):
+ *   reopenNow()
+ *     -> Listener.reopenCamera()            [same capturer, same track]
  *
  * Later, the capturer reports its first frame:
  *   onFramesArrived()
- *     -> endRecovery()                      -> CameraManager.unregisterAvailabilityCallback()
- *     -> setCaptureInterrupted(false)       -> Listener.onCaptureInterruptedChanged(false) // track "unmute"
+ *     -> endRecovery()                      [unregister, state: IDLE]
+ *     -> setCaptureInterrupted(false)       [track: unmute]
  * }</pre>
  *
- * <p>This class does not poll. The delay starts only after an Android callback. The first
- * availability report after we start listening, saying our camera is already free, also allows one
- * try. A priority change means a try may work, not that the camera is free. Recovery succeeds when
+ * <p>There is no polling: the delay starts only after an Android callback. The first availability
+ * report after we start listening also allows one try if it says our camera is already free. A
+ * priority change means a try may work now, not that the camera is free. Recovery succeeds when
  * the first frame arrives, not when {@code reopenCamera()} returns.
  *
- * <h2>Flow diagram (current code)</h2>
+ * <h2>2. Flow diagram</h2>
  *
- * <p>( ) = start or end, [ ] = step, &lt; &gt; = yes/no question, (W) and (S) = jump targets.
- *
- * <pre>{@code
- * ( START: the camera is running and the app requests capture )
- *                     |
- *                     v
- * [ onCameraDisconnected(): the capturer reports Android closed our camera ]
- *                     |
- *                     v
- * < still requested, same generation? > --no--> ( END: drop the event )
- *                     | yes
- *                     v
- * [ startRecovery(): Listener.onCaptureInterruptedChanged(true)  (track "mute"),
- *   startListening()  (register with CameraManager) ]
- *                     |
- *                     v
- * (W) [ WAITING_FOR_SIGNAL ]
- *                     |
- *                     v
- * < Android signal: priorities changed, or our camera   > --no--> keep waiting in (W)
- * < in use -> free, or the first report says it is free >
- * < (the first report counts once per recovery)         >
- *                     | yes
- *                     v
- * (S) [ scheduleReopen(): REOPEN_SCHEDULED. More signals now join this try ]
- *                     | after REOPEN_DELAY_MS (500 ms)
- *                     v
- * < reopenNow(), under the lock:      > --no--> [ endRecovery() ] --> ( END: the app stopped capture )
- * < still requested, same generation? >
- *                     | yes
- *                     v
- * [ REOPENING: Listener.reopenCamera() on the same capturer.
- *   A signal now sets retrySignalPending ]
- *                     |
- *                     v
- * < first frame arrived? > --yes--> [ onFramesArrived(): endRecovery(),
- *                     |               Listener.onCaptureInterruptedChanged(false)  (track "unmute") ]
- *                     |                                     |
- *                     |                                     v
- *                     |                  ( END: video is back on the same track )
- *                     | no: onCameraError() or onCameraDisconnected()
- *                     v
- * [ onReopenFailed(): failedReopens + 1 ]
- *                     |
- *                     v
- * < failedReopens == MAX_FAILED_REOPENS (3)? > --yes--> [ failRecovery(): Listener.onRecoveryFailed() ]
- *                     | no                                              |
- *                     v                                                 v
- * < retrySignalPending? > --yes--> go to (S)        ( END: track ended, the app shows the camera off )
- *                     | no
- *                     v
- *                 go to (W)
- *
- * Two more ways out:
- *
- * [ setCaptureRequested(false), at any point: the app stops capture ]
- *     --> new generation, endRecovery() --> ( END: we never reopen; older queued work is dropped )
- *
- * [ onCameraError() while the camera was working (IDLE) ]
- *     --> failRecovery(): Listener.onRecoveryFailed() --> ( END: track ended, camera shown off )
- * }</pre>
- *
- * <p>Not drawn: {@code onCameraDisconnected()} and {@code onCameraError()} are ignored while we wait
- * for a signal or a try is scheduled, and a signal is ignored when no recovery runs.
- *
- * <h2>The same path with overlapping events and cancelling</h2>
+ * <p>( ) = start or end, [ ] = state, &lt; &gt; = question, text beside an arrow = the event.
  *
  * <pre>{@code
- * The app starts or stops capture:
- *   setCaptureRequested(requested)
- *     -> record the request and start a new generation
- *     -> queued work from an older generation is dropped from now on
- *     -> on the main thread: end a recovery from an older generation (cancels its scheduled try)
+ * ( START: capture runs and the app requests it )
+ *     |
+ *     | capturer: camera disconnected
+ *     v
+ * < event still current? > --no--> ( END: drop the outdated event )
+ *     | yes
+ *     v
+ * [ WAITING_FOR_SIGNAL ]  (jump target WAIT)      track: mute, listening to CameraManager
+ *     |
+ *     | Android: priorities changed, or our camera in use -> free,
+ *     | or the first report says it is free (once per recovery)
+ *     v
+ * [ REOPEN_SCHEDULED ]  (jump target SCHEDULE)    more signals join this try
+ *     |
+ *     | 500 ms later
+ *     v
+ * < still requested, same generation? > --no--> ( END: cancel the outdated recovery )
+ *     | yes (checked under the lock)
+ *     v
+ * [ REOPENING ]                                   camera opened again; a signal now is kept
+ *     |
+ *     | wait for the capturer to report
+ *     +----------------------------------+
+ *     | first frame                      | error or disconnect
+ *     v                                  v
+ * ( END: recovery succeeded:      [ count the failed try ]
+ *   track: unmute, same track )          |
+ *                                        v
+ *                          < 3 failed tries? > --yes--> ( END: recovery failed:
+ *                                        | no               track: ended )
+ *                                        v
+ *                          < signal kept during the try? >
+ *                               | yes              | no
+ *                               v                  v
+ *                         go to SCHEDULE      go to WAIT
  *
- * A capturer event arrives (onCameraDisconnected / onCameraError / onFramesArrived):
- *   -> note the current generation, queue the work on the main thread
- *   -> isCurrent(generation)?  no: drop it  (capture stopped or restarted since)
- *
- * onCameraDisconnected(), on the main thread:
- *   IDLE:                        startRecovery()
- *   REOPENING:                   onReopenFailed()   // our try was disconnected
- *   WAITING / REOPEN_SCHEDULED:  ignore             // already recovering
- *
- * onCameraError(), on the main thread:
- *   REOPENING:                   onReopenFailed()   // our try could not open the camera
- *   IDLE:                        failRecovery()     // the working camera failed: waiting won't help
- *   WAITING / REOPEN_SCHEDULED:  ignore
- *
- * An Android signal arrives -> onRetrySignal():
- *   WAITING_FOR_SIGNAL:          scheduleReopen()   // one try after REOPEN_DELAY_MS
- *   REOPEN_SCHEDULED:            ignore             // the scheduled try starts after this signal
- *   REOPENING:                   retrySignalPending = true
- *   IDLE:                        ignore
- *
- * reopenNow():
- *   -> under the lock: still requested and same generation?  no: endRecovery()
- *   -> REOPENING, then Listener.reopenCamera() while still holding the lock, so a stop from
- *      another thread runs either before (we don't open) or after (its stopCapture closes it)
- *
- * onReopenFailed():
- *   -> count the failed try; MAX_FAILED_REOPENS reached: failRecovery() -> Listener.onRecoveryFailed()
- *   -> otherwise wait again; if retrySignalPending: scheduleReopen() now
+ * Other ways out, at any point:
+ *   app stops capture (or stops and starts it)
+ *     --> ( END: cancel the outdated recovery; we never reopen for it )
+ *   [ IDLE ] the working camera reports an error
+ *     --> ( END: recovery failed: track: ended )
  * }</pre>
  *
- * <p>We keep listening while a try is scheduled or running, so a signal that arrives during a
- * failed try is not lost. A repeated "still free" report without a change in between never
- * schedules another try. {@link #MAX_FAILED_REOPENS} counts failed tries only and is not a
- * timeout: if Android never sends another useful signal, the recovery waits until the app stops
- * capture.
+ * <p>Not drawn: a disconnect or error while {@code WAITING_FOR_SIGNAL} or {@code REOPEN_SCHEDULED}
+ * is ignored, and a signal is ignored when no recovery runs. "track: ended" is the event this
+ * class causes; the SDK or app decides what the user then sees.
+ *
+ * <h2>3. Race handling</h2>
+ *
+ * <p>The same path, with each safeguard shown where it acts.
+ *
+ * <pre>{@code
+ * A capturer event arrives (camera thread):
+ *   onCameraDisconnected() / onCameraError() / onFramesArrived()
+ *     -> currentGeneration()                [volatile read, never takes the lock]
+ *     -> queue the work on the main thread
+ *   On the main thread:
+ *     -> isCurrent(generation)?             [under the lock]
+ *        no:  drop the outdated event
+ *        yes: handle it by state
+ *
+ *   onCameraDisconnected():  IDLE -> startRecovery()   REOPENING -> onReopenFailed()
+ *   onCameraError():         IDLE -> failRecovery()    REOPENING -> onReopenFailed()
+ *   Both, in WAITING_FOR_SIGNAL or REOPEN_SCHEDULED: ignore (already recovering)
+ *
+ * An Android signal arrives (main thread) -> onRetrySignal():
+ *   WAITING_FOR_SIGNAL -> scheduleReopen()   [one try]
+ *   REOPEN_SCHEDULED   -> ignore             [the scheduled try starts after this signal]
+ *   REOPENING          -> retrySignalPending = true
+ *   IDLE               -> ignore
+ *
+ * The scheduled try runs (main thread) -> reopenNow():
+ *   take the lock
+ *     -> still requested and same generation?  no: endRecovery()
+ *     -> state: REOPENING, Listener.reopenCamera()   [enters the capturer, takes its lock]
+ *   release the lock
+ *
+ * The try fails -> onReopenFailed():
+ *   -> count it; at MAX_FAILED_REOPENS: failRecovery() -> Listener.onRecoveryFailed()
+ *   -> below: WAITING_FOR_SIGNAL; if retrySignalPending: scheduleReopen() now
+ *
+ * The app stops capture (any thread) -> setCaptureRequested(false):
+ *   under the lock: clear the request, generation + 1
+ *     -> queue: end any recovery from an older generation
+ *   then CameraCaptureController stops the capturer
+ *
+ * The first frame arrives -> onFramesArrived():
+ *   drop it if outdated; otherwise endRecovery(), setCaptureInterrupted(false)
+ * }</pre>
+ *
+ * <p>Stop against reopen: if the app's stop clears the request first, {@code reopenNow()} sees it
+ * and does not open the camera. If {@code reopenNow()} takes the lock first, the stop waits for
+ * the open to finish and then stops the capturer, so the camera never stays open after a stop.
+ *
+ * <p>Kept signals: we stay registered with CameraManager while a try is scheduled or running. A
+ * signal that arrives during a failed try schedules the next try, so Android does not have to
+ * send it again. A repeated "still free" report without a change never schedules another try.
+ *
+ * <p>{@link #MAX_FAILED_REOPENS} counts failed tries, not time. If Android never sends another
+ * useful signal, the recovery waits until the app stops capture.
  *
  * <h2>Android versions</h2>
  *
@@ -167,13 +171,24 @@ import java.util.Map;
  * different or private camera id there, and the first try fails, no later signal may come, and
  * capture stays interrupted until the app stops and starts capture.
  *
- * <h2>Threads</h2>
+ * <h2>Threads and locks</h2>
  *
- * <p>The four package-level methods ({@link #setCaptureRequested}, {@link #onCameraDisconnected},
- * {@link #onCameraError}, {@link #onFramesArrived}) can be called from any thread and queue their
- * work on the main thread. The {@link CameraManager} callbacks and all private methods run on the
- * main thread, which owns the recovery state. The lock rules are at the end of the class, in
- * "Capture session safeguards".
+ * <ul>
+ *   <li>The capturer calls {@link #onCameraDisconnected}, {@link #onCameraError} and
+ *       {@link #onFramesArrived} on its camera thread while holding its own lock. They read the
+ *       volatile generation with {@code currentGeneration()} and queue their work, without
+ *       taking our lock.</li>
+ *   <li>The CameraManager callbacks and all recovery state changes run on the main thread.</li>
+ *   <li>{@link #setCaptureRequested} can run on any thread. It changes the request and the
+ *       generation under our lock.</li>
+ *   <li>The main thread takes our lock to check that work is still current
+ *       ({@code isCurrent()}), and holds it in {@code reopenNow()} while it starts the
+ *       capturer.</li>
+ * </ul>
+ *
+ * <p>Lock rule: capturer callbacks never take our lock. Reopening takes our lock before it enters
+ * the capturer. Never add the reverse (taking our lock from a capturer callback), or the two
+ * threads can deadlock.
  */
 class CameraRecoveryController {
 
@@ -183,8 +198,8 @@ class CameraRecoveryController {
         void reopenCamera();
 
         /**
-         * Capture was interrupted by the system (true) or works again (false). The track stays live.
-         * This is not the user pausing their video.
+         * Capture was interrupted by the system (true) or works again (false). The track stays
+         * live. This is not the user pausing their video.
          */
         void onCaptureInterruptedChanged(boolean interrupted);
 
@@ -525,19 +540,19 @@ class CameraRecoveryController {
     // - captureRequested: what the app asked for. Not proof that the camera runs.
     // - generation: goes up every time the app starts or stops capture.
     //
-    // Both are written only under {@link #lock}. The capturer calls our package-level methods on the
-    // camera thread while holding its own lock, so the camera thread must never wait for our lock:
-    // it reads generation without the lock (it is volatile). Only the main thread and the thread
-    // that starts or stops capture take our lock. reopenNow() holds our lock while it starts the
-    // capturer (which takes the capturer's lock), so the order is always: our lock, then the
-    // capturer's.
+    // Both are written only under {@link #lock}. The capturer calls our package-level methods on
+    // the camera thread while holding its own lock, so the camera thread must never wait for our
+    // lock: it reads generation without the lock (it is volatile). Only the main thread and the
+    // thread that starts or stops capture take our lock. reopenNow() holds our lock while it starts
+    // the capturer (which takes the capturer's lock), so the order is always: our lock, then the
+    // capturer's. See "Threads and locks" in the class doc.
     //
     // Queued work carries the generation it was created in and is dropped by isCurrent() when the
     // app stopped or restarted capture since.
 
     private final Object lock = new Object();
 
-    /** The app requests capture (between startCapture and stopCapture). Guarded by {@link #lock}. */
+    /** The app requests capture (startCapture until stopCapture). Guarded by {@link #lock}. */
     private boolean captureRequested = false;
 
     /** Written under {@link #lock}; read without it on the camera thread. */
