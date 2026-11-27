@@ -28,21 +28,21 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Tests for {@link CameraReopener}: what happens after another app takes our camera.
+ * Tests for {@link CameraRecoveryController}: what happens after another app takes our camera.
  *
  * <p>Android's CameraManager is replaced by a mock. The test plays Android: it reports the camera
  * as taken, sends "try again" signals, and reports frames or failures, then checks what
- * CameraReopener asked the camera controller to do.
+ * CameraRecoveryController asked the camera controller to do.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 34)
-public class CameraReopenerTest {
+public class CameraRecoveryControllerTest {
 
     private static final String OUR_CAMERA = "1";
 
     private CameraManager cameraManager;
     private FakeController controller;
-    private CameraReopener reopener;
+    private CameraRecoveryController recovery;
 
     @Before
     public void setUp() {
@@ -50,10 +50,10 @@ public class CameraReopenerTest {
         Context context = mock(Context.class);
         when(context.getSystemService(Context.CAMERA_SERVICE)).thenReturn(cameraManager);
         controller = new FakeController();
-        reopener = new CameraReopener(context, controller);
+        recovery = new CameraRecoveryController(context, controller);
 
         // The app turns the camera on.
-        reopener.setCameraWanted(true);
+        recovery.setCaptureRequested(true);
         runMainThread();
     }
 
@@ -63,7 +63,7 @@ public class CameraReopenerTest {
     public void pausesTheVideoAndStartsListeningWhenAnotherAppTakesTheCamera() {
         cameraTaken();
 
-        assertEquals(Arrays.asList("paused"), controller.calls);
+        assertEquals(Arrays.asList("interrupted"), controller.calls);
         verify(cameraManager, times(1)).registerAvailabilityCallback(any(), any(Handler.class));
     }
 
@@ -72,7 +72,7 @@ public class CameraReopenerTest {
         cameraTaken();
 
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS - 1);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS - 1);
         assertEquals(0, controller.reopens());
 
         passTime(1);
@@ -83,11 +83,11 @@ public class CameraReopenerTest {
     public void resumesTheVideoAndStopsListeningWhenTheFirstFrameArrives() {
         cameraTaken();
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         framesArrived();
 
-        assertEquals(Arrays.asList("paused", "reopen", "resumed"), controller.calls);
+        assertEquals(Arrays.asList("interrupted", "reopen", "resumed"), controller.calls);
         verify(cameraManager).unregisterAvailabilityCallback(any());
     }
 
@@ -96,7 +96,7 @@ public class CameraReopenerTest {
         cameraTaken();
         cameraTaken();
 
-        assertEquals(Arrays.asList("paused"), controller.calls);
+        assertEquals(Arrays.asList("interrupted"), controller.calls);
         verify(cameraManager, times(1)).registerAvailabilityCallback(any(), any(Handler.class));
     }
 
@@ -107,7 +107,7 @@ public class CameraReopenerTest {
         prioritiesChanged();
         prioritiesChanged();
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(1, controller.reopens());
     }
@@ -118,7 +118,7 @@ public class CameraReopenerTest {
     public void triesAgainWithoutANewSignalWhenTheCameraWasFreedDuringAFailedTry() {
         cameraTaken();
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
         assertEquals(1, controller.reopens());
 
         // The other app frees the camera while our try is still running...
@@ -127,7 +127,7 @@ public class CameraReopenerTest {
         openFailed();
 
         // No new signal comes from Android, but the signal during the try is not lost.
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
         assertEquals(2, controller.reopens());
     }
 
@@ -136,13 +136,13 @@ public class CameraReopenerTest {
         cameraTaken();
         prioritiesChanged();
         prioritiesChanged(); // arrives while the try is scheduled: the scheduled try covers it
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
         openFailed();
 
         // Still listening, so the next signal opens the camera again.
         verify(cameraManager, never()).unregisterAvailabilityCallback(any());
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
         assertEquals(2, controller.reopens());
     }
 
@@ -155,7 +155,7 @@ public class CameraReopenerTest {
         android.onCameraUnavailable(OUR_CAMERA); // first report: the other app has it
 
         android.onCameraAvailable(OUR_CAMERA); // the other app freed it
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(1, controller.reopens());
     }
@@ -170,7 +170,7 @@ public class CameraReopenerTest {
         // The other app released the camera before we started listening, and no priority
         // signal will come. The only thing Android sends is how our camera is now: free.
         android.onCameraAvailable(OUR_CAMERA);
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(1, controller.reopens());
     }
@@ -183,14 +183,14 @@ public class CameraReopenerTest {
         // Samsung: our camera looks free while the Camera app holds a private camera id, so
         // the try from the first report fails...
         android.onCameraAvailable(OUR_CAMERA);
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
         openFailed();
 
         // ...and the Camera app closing later still brings the camera back.
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
-        assertEquals(Arrays.asList("paused", "reopen", "reopen"), controller.calls);
+        assertEquals(Arrays.asList("interrupted", "reopen", "reopen"), controller.calls);
     }
 
     @Test
@@ -198,13 +198,13 @@ public class CameraReopenerTest {
         cameraTaken();
         CameraManager.AvailabilityCallback android = registeredCallback();
         android.onCameraAvailable(OUR_CAMERA);
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
         openFailed();
 
         // Still free, nothing changed: not a reason to try again.
         android.onCameraAvailable(OUR_CAMERA);
         android.onCameraAvailable(OUR_CAMERA);
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(1, controller.reopens());
     }
@@ -216,7 +216,7 @@ public class CameraReopenerTest {
 
         android.onCameraUnavailable("20");
         android.onCameraAvailable("20");
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(0, controller.reopens());
     }
@@ -226,10 +226,10 @@ public class CameraReopenerTest {
     @Test
     public void doesNotEndARestartedTrackBecauseOfAnErrorFromTheStoppedSession() {
         // An error from the current session is queued for the main thread...
-        reopener.onCameraError();
+        recovery.onCameraError();
         // ...and before it runs, the app turns the camera off and on again.
-        reopener.setCameraWanted(false);
-        reopener.setCameraWanted(true);
+        recovery.setCaptureRequested(false);
+        recovery.setCaptureRequested(true);
         runMainThread();
 
         assertEquals(new ArrayList<String>(), controller.calls);
@@ -237,15 +237,15 @@ public class CameraReopenerTest {
 
     @Test
     public void doesNotLetAnOldTurnOffCancelARecoveryOfTheNewSession() {
-        reopener.setCameraWanted(false);
-        reopener.setCameraWanted(true);
-        reopener.onCameraTaken();
+        recovery.setCaptureRequested(false);
+        recovery.setCaptureRequested(true);
+        recovery.onCameraDisconnected();
         runMainThread();
 
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
-        assertEquals(Arrays.asList("paused", "reopen"), controller.calls);
+        assertEquals(Arrays.asList("interrupted", "reopen"), controller.calls);
     }
 
     // ---- The app turns the camera off ----
@@ -254,10 +254,10 @@ public class CameraReopenerTest {
     public void neverOpensTheCameraAfterTheAppTurnedItOffWhileWaiting() {
         cameraTaken();
 
-        reopener.setCameraWanted(false);
+        recovery.setCaptureRequested(false);
         runMainThread();
         prioritiesChanged();
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(0, controller.reopens());
         verify(cameraManager).unregisterAvailabilityCallback(any());
@@ -268,16 +268,16 @@ public class CameraReopenerTest {
         cameraTaken();
         prioritiesChanged();
 
-        passTime(CameraReopener.REOPEN_DELAY_MS / 2);
-        reopener.setCameraWanted(false);
-        passTime(CameraReopener.REOPEN_DELAY_MS);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS / 2);
+        recovery.setCaptureRequested(false);
+        passTime(CameraRecoveryController.REOPEN_DELAY_MS);
 
         assertEquals(0, controller.reopens());
     }
 
     @Test
     public void ignoresTheCameraBeingTakenWhileTheAppHasItTurnedOff() {
-        reopener.setCameraWanted(false);
+        recovery.setCaptureRequested(false);
         runMainThread();
 
         cameraTaken();
@@ -290,40 +290,40 @@ public class CameraReopenerTest {
 
     @Test
     public void endsTheTrackOnACameraErrorThatIsNotAboutAnotherApp() {
-        reopener.onCameraError();
+        recovery.onCameraError();
         runMainThread();
 
-        assertEquals(Arrays.asList("gaveUp"), controller.calls);
+        assertEquals(Arrays.asList("recoveryFailed"), controller.calls);
     }
 
     @Test
     public void endsTheTrackAfterThreeFailedTries() {
         cameraTaken();
-        for (int i = 0; i < CameraReopener.MAX_FAILED_REOPENS; i++) {
+        for (int i = 0; i < CameraRecoveryController.MAX_FAILED_REOPENS; i++) {
             prioritiesChanged();
-            passTime(CameraReopener.REOPEN_DELAY_MS);
+            passTime(CameraRecoveryController.REOPEN_DELAY_MS);
             openFailed();
         }
 
-        assertEquals(CameraReopener.MAX_FAILED_REOPENS, controller.reopens());
-        assertEquals("gaveUp", controller.calls.get(controller.calls.size() - 1));
+        assertEquals(CameraRecoveryController.MAX_FAILED_REOPENS, controller.reopens());
+        assertEquals("recoveryFailed", controller.calls.get(controller.calls.size() - 1));
         verify(cameraManager).unregisterAvailabilityCallback(any());
     }
 
     // ---- Helpers: the test plays Android and the camera ----
 
     private void cameraTaken() {
-        reopener.onCameraTaken();
+        recovery.onCameraDisconnected();
         runMainThread();
     }
 
     private void openFailed() {
-        reopener.onCameraError();
+        recovery.onCameraError();
         runMainThread();
     }
 
     private void framesArrived() {
-        reopener.onFramesArrived();
+        recovery.onFramesArrived();
         runMainThread();
     }
 
@@ -350,8 +350,8 @@ public class CameraReopenerTest {
         shadowMainLooper().idleFor(Duration.ofMillis(millis));
     }
 
-    /** Records what CameraReopener asked the camera controller to do, in order. */
-    private static class FakeController implements CameraReopener.Listener {
+    /** Records what CameraRecoveryController asked the camera controller to do, in order. */
+    private static class FakeController implements CameraRecoveryController.Listener {
         final List<String> calls = new ArrayList<>();
 
         @Override
@@ -360,13 +360,13 @@ public class CameraReopenerTest {
         }
 
         @Override
-        public void onPausedChanged(boolean paused) {
-            calls.add(paused ? "paused" : "resumed");
+        public void onCaptureInterruptedChanged(boolean interrupted) {
+            calls.add(interrupted ? "interrupted" : "resumed");
         }
 
         @Override
-        public void onGaveUp() {
-            calls.add("gaveUp");
+        public void onRecoveryFailed() {
+            calls.add("recoveryFailed");
         }
 
         @Nullable

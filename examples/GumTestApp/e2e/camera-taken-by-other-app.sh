@@ -13,7 +13,7 @@
 #   5. Tap "Flip". Expected: the camera switches and frames arrive
 #      (before the fix this failed with "switchCamera: camera is not running").
 #
-# Before the fix (CameraReopener), step 3 fails: libwebrtc stops the camera when Android
+# Before the fix (CameraRecoveryController), step 3 fails: libwebrtc stops the camera when Android
 # takes it, and nothing opens it again, so no frame arrives after going back.
 #
 # This checks the device log (logcat): native lines from the fork and JS lines that

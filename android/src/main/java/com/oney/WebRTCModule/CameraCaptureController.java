@@ -68,25 +68,25 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         @Override
         public void onCameraDisconnected() {
             super.onCameraDisconnected();
-            cameraReopener.onCameraTaken();
+            cameraRecovery.onCameraDisconnected();
         }
 
         // The camera could not be opened, or a fatal camera error happened.
         @Override
         public void onCameraError(String errorDescription) {
             super.onCameraError(errorDescription);
-            cameraReopener.onCameraError();
+            cameraRecovery.onCameraError();
         }
 
         @Override
         public void onFirstFrameAvailable() {
             super.onFirstFrameAvailable();
-            cameraReopener.onFramesArrived();
+            cameraRecovery.onFramesArrived();
         }
     };
 
-    /** Opens the camera again after another app took it. See the class doc for which Android versions. */
-    private final CameraReopener cameraReopener;
+    /** Gets the camera back after another app took it. See its class doc for which Android versions. */
+    private final CameraRecoveryController cameraRecovery;
 
     /** Name of the camera that was opened last. For Camera2 this is the CameraManager id. */
     @Nullable
@@ -96,22 +96,22 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
         super(constraints.getInt("width"), constraints.getInt("height"), constraints.getInt("frameRate"));
 
         this.context = context;
-        this.cameraReopener = new CameraReopener(context, new CameraReopener.Listener() {
+        this.cameraRecovery = new CameraRecoveryController(context, new CameraRecoveryController.Listener() {
             @Override
             public void reopenCamera() {
-                // The parent's startCapture: the app's wish (cameraWanted) does not change.
+                // The parent's startCapture: the app's request (captureRequested) does not change.
                 CameraCaptureController.super.startCapture();
             }
 
             @Override
-            public void onPausedChanged(boolean paused) {
+            public void onCaptureInterruptedChanged(boolean interrupted) {
                 if (capturerEventsListener != null) {
-                    capturerEventsListener.onCapturerMuteChanged(paused);
+                    capturerEventsListener.onCapturerMuteChanged(interrupted);
                 }
             }
 
             @Override
-            public void onGaveUp() {
+            public void onRecoveryFailed() {
                 if (capturerEventsListener != null) {
                     capturerEventsListener.onCapturerEnded();
                 }
@@ -142,20 +142,20 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
 
     @Override
     public void startCapture() {
-        cameraReopener.setCameraWanted(true);
+        cameraRecovery.setCaptureRequested(true);
         super.startCapture();
     }
 
     @Override
     public boolean stopCapture() {
         // First, so a reopen that is waiting can't turn the camera back on.
-        cameraReopener.setCameraWanted(false);
+        cameraRecovery.setCaptureRequested(false);
         return super.stopCapture();
     }
 
     @Override
     public void dispose() {
-        cameraReopener.setCameraWanted(false);
+        cameraRecovery.setCaptureRequested(false);
         super.dispose();
     }
 
