@@ -111,5 +111,11 @@ public abstract class AbstractVideoCaptureController {
     public interface CapturerEventsListener {
         /** Called when the capturer is ended and in an irrecoverable state. */
         public void onCapturerEnded();
+
+        /**
+         * Called when the capturer stops sending frames for a reason outside the app
+         * (muted = true), and when frames come back (muted = false). The track stays live.
+         */
+        default void onCapturerMuteChanged(boolean muted) {}
     }
 }

@@ -91,6 +91,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    // JVM unit tests (src/test) run with Robolectric.
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
 }
 
 def kotlin_version = getExtOrDefault('kotlinVersion', '1.8.10')
@@ -102,4 +109,9 @@ dependencies {
     implementation "com.facebook.react:react-android:+"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "androidx.core:core:1.7.0"
+
+    // Test-only: not part of what apps get from this library.
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'org.mockito:mockito-core:5.14.2'
 }

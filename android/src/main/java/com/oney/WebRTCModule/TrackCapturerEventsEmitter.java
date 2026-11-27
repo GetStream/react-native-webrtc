@@ -31,4 +31,18 @@ public class TrackCapturerEventsEmitter implements AbstractVideoCaptureControlle
 
         webRTCModule.sendEvent("mediaStreamTrackEnded", params);
     }
+
+    /** Notify that the capturer stopped or started sending frames, without ending the track. */
+    @Override
+    public void onCapturerMuteChanged(boolean muted) {
+        WritableMap params = Arguments.createMap();
+        // -1 marks a local track, the same value VideoTrackAdapter uses for local tracks.
+        params.putInt("pcId", -1);
+        params.putString("trackId", trackId);
+        params.putBoolean("muted", muted);
+
+        Log.d(TAG, (muted ? "mute" : "unmute") + " event trackId: " + trackId);
+
+        webRTCModule.sendEvent("mediaStreamTrackMuteChanged", params);
+    }
 }

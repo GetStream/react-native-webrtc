@@ -15,6 +15,7 @@ import com.facebook.react.bridge.WritableMap;
 import org.webrtc.Camera1Capturer;
 import org.webrtc.Camera1Helper;
 import org.webrtc.Camera2Capturer;
+import org.webrtc.Camera2Enumerator;
 import org.webrtc.Camera2Helper;
 import org.webrtc.CameraEnumerator;
 import org.webrtc.CameraVideoCapturer;
@@ -60,13 +61,72 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
             int cameraIndex = findCameraIndex(cameraName);
             updateActualSize(cameraIndex, cameraName, videoCapturer);
             CameraCaptureController.this.currentDeviceId = cameraIndex == -1 ? null : String.valueOf(cameraIndex);
+            CameraCaptureController.this.currentCameraName = cameraName;
+        }
+
+        // Android took our camera (another app opened a camera).
+        @Override
+        public void onCameraDisconnected() {
+            super.onCameraDisconnected();
+            cameraRecovery.onCameraDisconnected();
+        }
+
+        // The camera could not be opened, or a fatal camera error happened.
+        @Override
+        public void onCameraError(String errorDescription) {
+            super.onCameraError(errorDescription);
+            cameraRecovery.onCameraError();
+        }
+
+        @Override
+        public void onFirstFrameAvailable() {
+            super.onFirstFrameAvailable();
+            cameraRecovery.onFramesArrived();
         }
     };
+
+    /** Gets the camera back after another app took it. See its class doc for which Android versions. */
+    private final CameraRecoveryController cameraRecovery;
+
+    /** Name of the camera that was opened last. For Camera2 this is the CameraManager id. */
+    @Nullable
+    private volatile String currentCameraName;
 
     public CameraCaptureController(Context context, CameraEnumerator cameraEnumerator, ReadableMap constraints) {
         super(constraints.getInt("width"), constraints.getInt("height"), constraints.getInt("frameRate"));
 
         this.context = context;
+        this.cameraRecovery = new CameraRecoveryController(context, new CameraRecoveryController.Listener() {
+            @Override
+            public void reopenCamera() {
+                // The parent's startCapture: the app's request (captureRequested) does not change.
+                CameraCaptureController.super.startCapture();
+            }
+
+            @Override
+            public void onCaptureInterruptedChanged(boolean interrupted) {
+                if (capturerEventsListener != null) {
+                    capturerEventsListener.onCapturerMuteChanged(interrupted);
+                }
+            }
+
+            @Override
+            public void onRecoveryFailed() {
+                if (capturerEventsListener != null) {
+                    capturerEventsListener.onCapturerEnded();
+                }
+            }
+
+            @Nullable
+            @Override
+            public String currentCameraId() {
+                // Camera2: the camera name is the CameraManager id. Camera1: the camera index is
+                // the same number as the CameraManager id.
+                return CameraCaptureController.this.cameraEnumerator instanceof Camera2Enumerator
+                        ? currentCameraName
+                        : currentDeviceId;
+            }
+        });
         this.cameraEnumerator = cameraEnumerator;
         this.constraints = constraints;
 
@@ -78,6 +138,25 @@ public class CameraCaptureController extends AbstractVideoCaptureController {
     @Override
     public String getDeviceId() {
         return currentDeviceId;
+    }
+
+    @Override
+    public void startCapture() {
+        cameraRecovery.setCaptureRequested(true);
+        super.startCapture();
+    }
+
+    @Override
+    public boolean stopCapture() {
+        // First, so a reopen that is waiting can't turn the camera back on.
+        cameraRecovery.setCaptureRequested(false);
+        return super.stopCapture();
+    }
+
+    @Override
+    public void dispose() {
+        cameraRecovery.setCaptureRequested(false);
+        super.dispose();
     }
 
     private int findCameraIndex(String cameraName) {
